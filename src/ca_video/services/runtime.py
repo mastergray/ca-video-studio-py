@@ -6,7 +6,7 @@ import numpy as np  # Create frame buffers and disabled-layer grids
 from numpy.typing import NDArray  # Describe NumPy array types
 
 from ca_video.config.models import Layer2DConfig, ProjectConfig  # Read validated project settings
-from ca_video.rendering.renderer_2d import Renderer2D  # Render transparent layer frames
+from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
 from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
 from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
@@ -197,8 +197,30 @@ class ProjectRuntime:
             initial.rleData,
             rlePath,
             layer.boundary,
+            self._shapeOffsetCells(layer),
         )
         return OuterTotalisticEngine(grid, layer.rule, layer.boundary)
+
+    # :: layer2DConfig -> (INT, INT)
+    # Converts export-pixel shape offsets to the nearest logical cells
+    def _shapeOffsetCells(self, layer: Layer2DConfig) -> tuple[int, int]:
+        renderWidth, renderHeight = scaledGridSize(
+            self._project.output.width,
+            self._project.output.height,
+            layer.gridWidth,
+            layer.gridHeight,
+            layer.layout,
+        )
+        return (
+            self._nearestCellOffset(layer.initial.offsetPx[0], layer.gridWidth, renderWidth),
+            self._nearestCellOffset(layer.initial.offsetPx[1], layer.gridHeight, renderHeight),
+        )
+
+    # :: INT, INT, INT -> INT
+    # Rounds a signed pixel displacement to the nearest cell away from zero on ties
+    def _nearestCellOffset(self, pixelOffset: int, cellCount: int, pixelCount: int) -> int:
+        magnitude = (abs(pixelOffset) * cellCount * 2 + pixelCount) // (pixelCount * 2)
+        return -magnitude if pixelOffset < 0 else magnitude
 
     # :: VOID -> NONE
     # Rebuilds renderers for the current output and layer appearances

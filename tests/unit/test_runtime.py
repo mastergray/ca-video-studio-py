@@ -130,3 +130,39 @@ def test_wolfram_and_outer_totalistic_layers_share_independent_timing() -> None:
     assert runtime.engineForLayer(1).generation == 1
     assert isinstance(runtime.engineForLayer(1), WolframEngine)
     assert frame.shape == (180, 320, 3)
+
+
+def test_shape_pixel_offset_uses_export_scale_for_preview_and_export() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["simulation"]["initial"] = {
+        "type": "disc",
+        "density": 1,
+        "radius": 1,
+        "offset_px": [40, -20],
+    }
+    project = parseProject(data)
+    previewRuntime = ProjectRuntime(project, (320, 180))
+    exportRuntime = ProjectRuntime(project)
+
+    np.testing.assert_array_equal(previewRuntime.engine.grid, exportRuntime.engine.grid)
+    assert previewRuntime.engine.grid[39, 89] == 1
+    assert previewRuntime._shapeOffsetCells(project.layer) == (10, -5)
+    assert previewRuntime._nearestCellOffset(2, 160, 640) == 1
+    assert previewRuntime._nearestCellOffset(-2, 160, 640) == -1
+    assert previewRuntime._nearestCellOffset(1, 160, 640) == 0
+
+
+def test_shape_pixel_offset_uses_cover_layout_scale() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["simulation"]["grid"] = {"size": [100, 100], "boundary": "wrap"}
+    data["layers"][0]["simulation"]["initial"] = {
+        "type": "center_block",
+        "density": 1,
+        "radius": 1,
+        "offset_px": [64, 64],
+    }
+    data["layers"][0]["render"]["layout"] = "cover"
+    project = parseProject(data)
+    runtime = ProjectRuntime(project, (320, 180))
+
+    assert runtime._shapeOffsetCells(project.layer) == (10, 10)

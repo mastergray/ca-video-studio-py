@@ -1,6 +1,6 @@
 import numpy as np  # Build source grids and inspect RGB output
 
-from ca_video.rendering.renderer_2d import Renderer2D  # Exercise exact-size 2D rendering
+from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Exercise exact-size 2D rendering
 
 
 def test_renderer_produces_exact_rgb_dimensions() -> None:
@@ -12,3 +12,8 @@ def test_renderer_produces_exact_rgb_dimensions() -> None:
     assert frame.shape == (180, 320, 3)
     assert frame.dtype == np.uint8
     assert frame.max() == 255
+
+
+def test_scaled_grid_size_matches_fit_and_cover_geometry() -> None:
+    assert scaledGridSize(640, 360, 100, 100, "fit") == (360, 360)
+    assert scaledGridSize(640, 360, 100, 100, "cover") == (640, 640)

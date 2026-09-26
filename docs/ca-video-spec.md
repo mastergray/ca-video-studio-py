@@ -293,6 +293,15 @@ Initialization requirements:
 - RLE headers and comments are accepted. Unsupported multistate RLE symbols produce a clear error.
 - A pattern larger than a fixed grid is an error. Under wrapped boundaries it is allowed and wraps deterministically.
 - Density is applied only within the selected initialization shape.
+- Two-dimensional `center_block` and `disc` initializers accept optional
+  `offset_px: [x, y]` values from -8192 through 8192. Positive X moves right;
+  positive Y moves down. `(0, 0)` is the export-canvas center.
+- Pixel offsets are converted to the nearest logical cell using the exact
+  export `fit` or `cover` raster scale, with half-cell ties rounded away from
+  zero. Preview uses that same resolved grid position rather than converting
+  against its smaller raster.
+- Offset geometric shapes clip at fixed grid edges and wrap deterministically
+  at wrapped edges. A zero offset is omitted from normalized project JSON.
 
 ## 10. Layers and composition
 

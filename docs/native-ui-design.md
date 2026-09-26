@@ -237,7 +237,9 @@ The inspector has two top-level tabs.
 - **Simulation:** rule family, catalog rule or custom rule, neighborhood,
   boundary, and number of states.
 - **Initial Condition:** initializer type, seed override, and
-  initializer-specific values such as density, radius, cells, or RLE file.
+  initializer-specific values such as density, radius, export-pixel X/Y
+  offsets, cells, or RLE file. Offset controls appear only for 2D center-block
+  and disc initializers.
 - **Appearance:** 2D colors/gradient/trail/opacity or 3D palette/render
   style/coloring/voxel scale.
 - **Timing:** step interval and visual fade settings.

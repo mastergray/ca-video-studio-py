@@ -11,7 +11,7 @@ RLE_HEADER = re.compile(r"x\s*=\s*(\d+)\s*,\s*y\s*=\s*(\d+)(?:\s*,.*)?$", re.IGN
 RLE_TOKEN = re.compile(r"(\d*)([bo$!])", re.IGNORECASE)
 
 
-# :: INT, INT, STRING, FLOAT, INT, INT, (INT, INT)?, ((INT, INT))?, STRING, STRING?, path? -> grid
+# :: INT, INT, STRING, FLOAT, INT, INT, (INT, INT)?, ((INT, INT))?, STRING, STRING?, path?, STRING, (INT, INT) -> grid
 # Creates a grid from a validated initialization description
 def initializeGrid(
     width: int,
@@ -26,6 +26,7 @@ def initializeGrid(
     rleData: str | None = None,
     rlePath: Path | None = None,
     boundary: str = "wrap",
+    offsetCells: tuple[int, int] = (0, 0),
 ) -> Grid:
     if initialType == "random":
         randomGenerator = np.random.default_rng(seed)
@@ -33,11 +34,11 @@ def initializeGrid(
     if initialType == "center_block":
         blockWidth, blockHeight = size or (radius * 2 + 1, radius * 2 + 1)
         mask = np.ones((blockHeight, blockWidth), dtype=bool)
-        return _placeMask(width, height, mask, density, seed)
+        return _placeMask(width, height, mask, density, seed, offsetCells, boundary)
     if initialType == "disc":
         axis = np.arange(-radius, radius + 1)
         mask = axis[:, None] ** 2 + axis[None, :] ** 2 <= radius**2
-        return _placeMask(width, height, mask, density, seed)
+        return _placeMask(width, height, mask, density, seed, offsetCells, boundary)
     if initialType == "cells":
         grid = np.zeros((height, width), dtype=np.uint8)
         offsetX = width // 2 if origin == "center" else 0
@@ -107,18 +108,39 @@ def parseRle(value: str) -> Grid:
     return grid
 
 
-# :: INT, INT, grid, FLOAT, INT -> grid
-# Centers a geometric mask and fills it with deterministic density
-def _placeMask(width: int, height: int, mask: NDArray[np.bool_], density: float, seed: int) -> Grid:
+# :: INT, INT, grid, FLOAT, INT, (INT, INT), STRING -> grid
+# Places an offset geometric mask with fixed clipping or deterministic wrapping
+def _placeMask(
+    width: int,
+    height: int,
+    mask: NDArray[np.bool_],
+    density: float,
+    seed: int,
+    offsetCells: tuple[int, int],
+    boundary: str,
+) -> Grid:
     maskHeight, maskWidth = mask.shape
     if maskWidth > width or maskHeight > height:
         raise ValueError("initial shape is larger than the grid")
     randomGenerator = np.random.default_rng(seed)
     filled = mask & (randomGenerator.random(mask.shape) < density)
     grid = np.zeros((height, width), dtype=np.uint8)
-    startX = (width - maskWidth) // 2
-    startY = (height - maskHeight) // 2
-    grid[startY : startY + maskHeight, startX : startX + maskWidth] = filled
+    startX = (width - maskWidth) // 2 + offsetCells[0]
+    startY = (height - maskHeight) // 2 + offsetCells[1]
+    if boundary == "wrap":
+        yValues, xValues = np.nonzero(filled)
+        grid[(yValues + startY) % height, (xValues + startX) % width] = 1
+        return grid
+
+    destinationX = max(0, startX), min(width, startX + maskWidth)
+    destinationY = max(0, startY), min(height, startY + maskHeight)
+    if destinationX[0] >= destinationX[1] or destinationY[0] >= destinationY[1]:
+        return grid
+    sourceX = destinationX[0] - startX, destinationX[1] - startX
+    sourceY = destinationY[0] - startY, destinationY[1] - startY
+    grid[destinationY[0] : destinationY[1], destinationX[0] : destinationX[1]] = filled[
+        sourceY[0] : sourceY[1], sourceX[0] : sourceX[1]
+    ]
     return grid
 
 

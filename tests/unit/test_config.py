@@ -170,3 +170,19 @@ def test_wolfram_random_row_defaults_to_half_density() -> None:
 
     assert project.layer.initial.density == 0.5
     assert project.toDict()["layers"][0]["simulation"]["initial"]["density"] == 0.5
+
+
+def test_geometric_pixel_offset_round_trips_and_is_type_specific(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    initial = data["layers"][0]["simulation"]["initial"]
+    initial.update({"type": "disc", "radius": 8, "offset_px": [120, -64]})
+
+    project = parseProject(data, tmp_path)
+    loaded = saveProject(project, tmp_path / "offset.cav.json")
+
+    assert loaded.layer.initial.offsetPx == (120, -64)
+    assert loaded.toDict()["layers"][0]["simulation"]["initial"]["offset_px"] == [120, -64]
+
+    initial.update({"type": "random"})
+    with pytest.raises(ConfigError, match="supported only"):
+        parseProject(data, tmp_path)

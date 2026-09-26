@@ -198,3 +198,29 @@ def test_existing_layer_can_switch_simulation_family() -> None:
     assert window.project.layer.initial.type == "random"
     window._setDirty(False)
     window.close()
+
+
+def test_disc_offset_is_edited_in_export_pixels() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    inspector = window.inspector
+
+    inspector._initialType.setCurrentIndex(inspector._initialType.findData("disc"))
+    inspector._offsetX.setValue(80)
+    inspector._offsetY.setValue(-40)
+    app.processEvents()
+
+    assert window.project.layer.initial.offsetPx == (80, -40)
+    assert window.runtime._shapeOffsetCells(window.project.layer) == (20, -10)
+    assert inspector._offsetX.isVisibleTo(inspector)
+    assert inspector._offsetY.isVisibleTo(inspector)
+
+    for _ in range(3):
+        window._advancePreview()
+    assert window.runtime.engine.generation == 1
+    inspector._resolution.setCurrentIndex(inspector._resolution.findData("960x540"))
+    app.processEvents()
+    assert window.runtime.engine.generation == 0
+    assert window.runtime._shapeOffsetCells(window.project.layer) == (13, -7)
+    window._setDirty(False)
+    window.close()

@@ -7,6 +7,23 @@ RGBFrame = NDArray[np.uint8]
 RGBAFrame = NDArray[np.float32]
 
 
+# :: INT, INT, INT, INT, STRING -> (INT, INT)
+# Calculates the exact intermediate grid raster used by fit or cover rendering
+def scaledGridSize(
+    canvasWidth: int,
+    canvasHeight: int,
+    gridWidth: int,
+    gridHeight: int,
+    layout: str,
+) -> tuple[int, int]:
+    scale = (
+        max(canvasWidth / gridWidth, canvasHeight / gridHeight)
+        if layout == "cover"
+        else min(canvasWidth / gridWidth, canvasHeight / gridHeight)
+    )
+    return max(1, int(round(gridWidth * scale))), max(1, int(round(gridHeight * scale)))
+
+
 # Converts a two-dimensional cell grid into an exact-size RGB frame
 class Renderer2D:
 
@@ -46,12 +63,13 @@ class Renderer2D:
     # Renders transparent color and alpha for project composition
     def renderLayer(self, grid: NDArray[np.uint8]) -> RGBAFrame:
         gridHeight, gridWidth = grid.shape
-        if self._layout == "cover":
-            scale = max(self._width / gridWidth, self._height / gridHeight)
-        else:
-            scale = min(self._width / gridWidth, self._height / gridHeight)
-        renderWidth = max(1, int(round(gridWidth * scale)))
-        renderHeight = max(1, int(round(gridHeight * scale)))
+        renderWidth, renderHeight = scaledGridSize(
+            self._width,
+            self._height,
+            gridWidth,
+            gridHeight,
+            self._layout,
+        )
         resized = self._resizeNearest(grid, renderWidth, renderHeight)
 
         intensity = np.zeros(resized.shape, dtype=np.float32)

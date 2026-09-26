@@ -200,7 +200,7 @@ class OutputConfig:
 # Stores validated settings for a two-dimensional initializer
 class Initial2DConfig:
 
-    # CONSTRUCTOR :: STRING, FLOAT, INT, (INT, INT)?, ((INT, INT)), STRING, STRING?, path?, (INT) -> initial2DConfig
+    # CONSTRUCTOR :: STRING, FLOAT, INT, (INT, INT)?, ((INT, INT)), STRING, STRING?, path?, (INT), (INT, INT) -> initial2DConfig
     # Creates immutable-by-convention initializer settings
     def __init__(
         self,
@@ -213,6 +213,7 @@ class Initial2DConfig:
         rleData: str | None = None,
         rlePath: Path | None = None,
         bits: tuple[int, ...] = (),
+        offsetPx: tuple[int, int] = (0, 0),
     ) -> None:
         self._type = type
         self._density = density
@@ -223,6 +224,7 @@ class Initial2DConfig:
         self._rleData = rleData
         self._rlePath = rlePath
         self._bits = bits
+        self._offsetPx = offsetPx
 
     #
     # Properties
@@ -281,6 +283,12 @@ class Initial2DConfig:
     @property
     def bits(self) -> tuple[int, ...]:
         return self._bits
+
+    # PROPERTY :: VOID -> (INT, INT)
+    # Returns the geometric center offset in export pixels
+    @property
+    def offsetPx(self) -> tuple[int, int]:
+        return self._offsetPx
 
 
 # Stores validated settings for an outer-totalistic or Wolfram 2D layer
@@ -585,6 +593,8 @@ def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
         if initial.type in {"random", "center_block", "disc"}:
             initialData["density"] = initial.density
         if initial.type in {"center_block", "disc"}:
+            if initial.offsetPx != (0, 0):
+                initialData["offset_px"] = list(initial.offsetPx)
             if initial.size is not None and initial.type == "center_block":
                 initialData["size"] = list(initial.size)
             else:
@@ -786,7 +796,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     initialFields = (
         {"type", "density", "bits"}
         if simulationMode == "wolfram_2d"
-        else {"type", "density", "radius", "size", "cells", "origin", "data", "path"}
+        else {"type", "density", "radius", "size", "cells", "origin", "data", "path", "offset_px"}
     )
     _rejectUnknown(initialData, initialFields, "layers[0].simulation.initial")
     initialType = initialData.get("type")
@@ -819,6 +829,17 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         diameter = radius * 2 + 1
         if diameter > gridWidth or diameter > gridHeight:
             raise ConfigError("initial radius is too large for the configured grid")
+    offsetPx = (0, 0)
+    if "offset_px" in initialData:
+        if initialType not in {"center_block", "disc"}:
+            raise ConfigError("initial offset_px is supported only for center_block and disc")
+        offsetValue = initialData["offset_px"]
+        if not isinstance(offsetValue, list) or len(offsetValue) != 2:
+            raise ConfigError("layers[0].simulation.initial.offset_px must contain [x, y]")
+        offsetPx = (
+            _asInteger(offsetValue[0], "layers[0].simulation.initial.offset_px[0]", -8192, 8192),
+            _asInteger(offsetValue[1], "layers[0].simulation.initial.offset_px[1]", -8192, 8192),
+        )
     origin = initialData.get("origin", "center")
     if origin not in {"center", "absolute"}:
         raise ConfigError("layers[0].simulation.initial.origin must be center or absolute")
@@ -881,7 +902,18 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
             for index, bit in enumerate(bitValues)
         )
 
-    initial = Initial2DConfig(initialType, density, radius, shapeSize, cells, origin, rleData, rlePath, bits)
+    initial = Initial2DConfig(
+        initialType,
+        density,
+        radius,
+        shapeSize,
+        cells,
+        origin,
+        rleData,
+        rlePath,
+        bits,
+        offsetPx,
+    )
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
     _rejectUnknown(render, {"style", "color", "layout"}, "layers[0].render")

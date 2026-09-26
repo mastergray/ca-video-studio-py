@@ -153,6 +153,8 @@ class PropertyInspector(QWidget):
         self._populateInitialTypes(layer.simulationMode, initial.type)
         self._density.setValue(initial.density)
         self._radius.setValue(initial.radius)
+        self._offsetX.setValue(initial.offsetPx[0])
+        self._offsetY.setValue(initial.offsetPx[1])
         self._origin.setCurrentIndex(max(0, self._origin.findData(initial.origin)))
         self._cells.setPlainText("\n".join(f"{xValue},{yValue}" for xValue, yValue in initial.cells))
         rleText = initial.rleData or ""
@@ -324,6 +326,10 @@ class PropertyInspector(QWidget):
         self._density.setSingleStep(0.05)
         self._density.setDecimals(2)
         self._radius = self._spinBox(1, 2048)
+        self._offsetX = self._spinBox(-8192, 8192, " px")
+        self._offsetX.setToolTip("Horizontal position relative to the export canvas center")
+        self._offsetY = self._spinBox(-8192, 8192, " px")
+        self._offsetY.setToolTip("Vertical position relative to the export canvas center")
         self._origin = QComboBox()
         self._origin.addItem("Centered", "center")
         self._origin.addItem("Absolute", "absolute")
@@ -338,6 +344,8 @@ class PropertyInspector(QWidget):
         initialForm.addRow("Type", self._initialType)
         initialForm.addRow("Density", self._density)
         initialForm.addRow("Radius", self._radius)
+        initialForm.addRow("Offset X", self._offsetX)
+        initialForm.addRow("Offset Y", self._offsetY)
         initialForm.addRow("Coordinates", self._origin)
         initialForm.addRow("Cells", self._cells)
         initialForm.addRow("RLE", self._rle)
@@ -383,6 +391,8 @@ class PropertyInspector(QWidget):
             self._boundary,
             self._density,
             self._radius,
+            self._offsetX,
+            self._offsetY,
             self._origin,
             self._stepInterval,
         ):
@@ -394,7 +404,7 @@ class PropertyInspector(QWidget):
         self._rle.textChanged.connect(self._queueTextChange)
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
         self._opacity.valueChanged.connect(lambda _value: self._emitChange(False))
-        self._layout.currentIndexChanged.connect(lambda _value: self._emitChange(False))
+        self._layout.currentIndexChanged.connect(self._layoutChanged)
         return container
 
     # :: VOID -> widget
@@ -569,11 +579,27 @@ class PropertyInspector(QWidget):
     def _resolutionChanged(self) -> None:
         self._syncGridControls()
         usesDerivedGrid = self._gridMode.currentData() == "cell_size"
+        usesPixelOffset = (
+            self._initialType.currentData() in {"center_block", "disc"}
+            and (self._offsetX.value() != 0 or self._offsetY.value() != 0)
+        )
         if self._project is not None:
             usesDerivedGrid = usesDerivedGrid or any(
                 layer.cellSizePx is not None for layer in self._project.layers
             )
-        self._emitChange(usesDerivedGrid)
+            usesPixelOffset = usesPixelOffset or any(
+                layer.initial.offsetPx != (0, 0) for layer in self._project.layers
+            )
+        self._emitChange(usesDerivedGrid or usesPixelOffset)
+
+    # :: VOID -> NONE
+    # Resets geometry when a layout change alters pixel-to-cell conversion
+    def _layoutChanged(self) -> None:
+        usesPixelOffset = (
+            self._initialType.currentData() in {"center_block", "disc"}
+            and (self._offsetX.value() != 0 or self._offsetY.value() != 0)
+        )
+        self._emitChange(usesPixelOffset)
 
     # :: VOID -> NONE
     # Shows a custom seed editor only when override mode is selected
@@ -633,6 +659,8 @@ class PropertyInspector(QWidget):
             initialType in {"random", "center_block", "disc"},
         )
         self._setFieldVisible(self._initialForm, self._radius, initialType in {"center_block", "disc"})
+        self._setFieldVisible(self._initialForm, self._offsetX, initialType in {"center_block", "disc"})
+        self._setFieldVisible(self._initialForm, self._offsetY, initialType in {"center_block", "disc"})
         self._setFieldVisible(self._initialForm, self._origin, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._cells, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._rle, initialType == "rle")
@@ -671,7 +699,12 @@ class PropertyInspector(QWidget):
         if initialType == "random":
             return {"type": initialType, "density": self._density.value()}
         if initialType in {"center_block", "disc"}:
-            return {"type": initialType, "density": self._density.value(), "radius": self._radius.value()}
+            return {
+                "type": initialType,
+                "density": self._density.value(),
+                "radius": self._radius.value(),
+                "offset_px": [self._offsetX.value(), self._offsetY.value()],
+            }
         if initialType == "cells":
             cells: list[list[int]] = []
             for lineNumber, line in enumerate(self._cells.toPlainText().splitlines(), 1):
