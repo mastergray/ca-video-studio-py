@@ -211,6 +211,8 @@ class MainWindow(QMainWindow):
         addWolframAction.triggered.connect(self._addWolframLayer)
         add3DAction = addMenu.addAction("3D Automaton")
         add3DAction.triggered.connect(self._add3DLayer)
+        addWolfram3DAction = addMenu.addAction("Wolfram 3D Extrusion")
+        addWolfram3DAction.triggered.connect(self._addWolfram3DLayer)
         self._addLayerButton.setMenu(addMenu)
         layout.addWidget(self._addLayerButton)
         self._duplicateLayerButton = QPushButton("Duplicate")
@@ -414,7 +416,11 @@ class MainWindow(QMainWindow):
         duration = self._project.output.durationSeconds
         currentSeconds = self._previewTick / PREVIEW_FPS
         if isinstance(layer, Layer3DConfig):
-            ruleLabel = layer.rule.notation
+            ruleLabel = (
+                f"W{layer.wolframRule}"
+                if layer.simulationMode == "wolfram_3d_extruded"
+                else layer.rule.notation if layer.rule is not None else "Unknown"
+            )
             gridLabel = f"{layer.gridSize}³"
         else:
             ruleLabel = (
@@ -626,6 +632,39 @@ class MainWindow(QMainWindow):
         self._loadUiFromProject()
 
     # :: VOID -> NONE
+    # Adds the reference-style extruded elementary automaton volume
+    def _addWolfram3DLayer(self) -> None:
+        data = self._project.toDict()
+        layerNumber = len(data["layers"]) + 1
+        layerData = {
+            "id": self._uniqueLayerId(f"wolfram_3d_{layerNumber}"),
+            "name": "Wolfram 3D Rule 30",
+            "enabled": True,
+            "dimension": "3d",
+            "z_index": 0,
+            "opacity": 1.0,
+            "step_interval_ms": 100,
+            "simulation": {
+                "mode": "wolfram_3d_extruded",
+                "grid": {"grid_size": 24, "boundary": "fixed"},
+                "rule": {"number": 30},
+                "initial": {"type": "single_center"},
+                "extrusion_depth": 6,
+            },
+            "render": {
+                "style": "isometric_voxel",
+                "palette": "wolfram3d",
+                "voxel_scale": "auto",
+                "surface_only": True,
+            },
+        }
+        data["layers"].insert(0, layerData)
+        self._normalizeLayerOrder(data)
+        self._selectedLayerIndex = 0
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: VOID -> NONE
     # Duplicates the selected layer with a fresh stable identifier
     def _duplicateLayer(self) -> None:
         data = self._project.toDict()
@@ -680,7 +719,7 @@ class MainWindow(QMainWindow):
     # Produces the compact simulation-family label shown in the layer list
     def _layerTypeLabel(self, layer: LayerConfig) -> str:
         if isinstance(layer, Layer3DConfig):
-            return "3D"
+            return "W3D" if layer.simulationMode == "wolfram_3d_extruded" else "3D"
         return f"W{layer.wolframRule}" if layer.simulationMode == "wolfram_2d" else "2D"
 
     # :: ARRAY<STRING, object> -> NONE

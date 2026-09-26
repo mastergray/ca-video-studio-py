@@ -152,3 +152,58 @@ def test_3d_project_exports_through_shared_pipeline(tmp_path) -> None:
         "height": 180,
         "nb_frames": "2",
     }
+
+
+def test_wolfram_3d_project_exports_through_shared_pipeline(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    data["output"].update(
+        {
+            "width": 320,
+            "height": 180,
+            "fps": 10,
+            "duration_seconds": 0.2,
+            "encoder_preset": "ultrafast",
+        }
+    )
+    data["layers"][0] = {
+        "id": "wolfram_3d",
+        "name": "Wolfram 3D",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "wolfram_3d_extruded",
+            "grid": {"grid_size": 20, "boundary": "fixed"},
+            "rule": {"number": 30},
+            "initial": {"type": "single_center"},
+            "extrusion_depth": 5,
+        },
+        "render": {
+            "style": "isometric_voxel",
+            "palette": "wolfram3d",
+            "surface_only": True,
+        },
+    }
+    output = tmp_path / "wolfram-3d.mp4"
+    renderProject(parseProject(data, tmp_path), output)
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,nb_frames",
+            "-of",
+            "json",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(probe.stdout)["streams"][0] == {
+        "width": 320,
+        "height": 180,
+        "nb_frames": "2",
+    }

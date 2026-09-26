@@ -309,3 +309,59 @@ def test_isometric_style_rejects_projected_only_controls() -> None:
 
     with pytest.raises(ConfigError, match="projected render controls"):
         parseProject(data)
+
+
+def test_wolfram_3d_extrusion_round_trips_family_specific_fields() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0] = {
+        "id": "wolfram_3d",
+        "name": "Wolfram 3D",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "wolfram_3d_extruded",
+            "grid": {"grid_size": 24, "boundary": "fixed"},
+            "rule": {"number": 110},
+            "initial": {"type": "bits", "bits": [1, 0, 1, 1]},
+            "extrusion_depth": 7,
+        },
+        "render": {
+            "style": "projected_voxel",
+            "palette": "wolfram3d",
+            "color_by": "height",
+            "surface_only": True,
+        },
+    }
+
+    project = parseProject(data)
+    normalized = parseProject(project.toDict())
+
+    assert normalized.layer.simulationMode == "wolfram_3d_extruded"
+    assert normalized.layer.wolframRule == 110
+    assert normalized.layer.rule is None
+    assert normalized.layer.rulePreset is None
+    assert normalized.layer.initial.bits == (1, 0, 1, 1)
+    assert normalized.layer.extrusionDepth == 7
+    assert normalized.layer.palette == "wolfram3d"
+
+
+def test_wolfram_3d_requires_fixed_volume_and_fitting_extrusion() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0] = {
+        "id": "wolfram_3d",
+        "name": "Wolfram 3D",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "wolfram_3d_extruded",
+            "grid": {"grid_size": 16, "boundary": "wrap"},
+            "rule": {"number": 30},
+            "initial": {"type": "single_center"},
+        },
+        "render": {"style": "isometric_voxel", "palette": "wolfram3d"},
+    }
+    with pytest.raises(ConfigError, match="fixed volume"):
+        parseProject(data)
+
+    data["layers"][0]["simulation"]["grid"]["boundary"] = "fixed"
+    data["layers"][0]["simulation"]["extrusion_depth"] = 17
+    with pytest.raises(ConfigError, match="between 1 and 16"):
+        parseProject(data)

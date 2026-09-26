@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Wolfram 3D Rule 30",
+    "seed": 30
+  },
+  "output": {
+    "path": "renders/wolfram-3d-rule-30.mp4",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_seconds": 10,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#0d1117"
+  },
+  "layers": [
+    {
+      "id": "wolfram_3d_30",
+      "name": "Wolfram 3D Rule 30",
+      "enabled": true,
+      "dimension": "3d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 100,
+      "simulation": {
+        "mode": "wolfram_3d_extruded",
+        "grid": {
+          "grid_size": 32,
+          "boundary": "fixed"
+        },
+        "rule": {
+          "number": 30
+        },
+        "initial": {
+          "type": "single_center"
+        },
+        "extrusion_depth": 8
+      },
+      "render": {
+        "style": "isometric_voxel",
+        "palette": "wolfram3d",
+        "voxel_scale": "auto",
+        "surface_only": true
+      }
+    }
+  ]
+}

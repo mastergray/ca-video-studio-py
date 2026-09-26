@@ -12,8 +12,10 @@ random/geometric/explicit initialization, depth-ordered `isometric_voxel`
 rendering, and depth-buffered `projected_voxel` rendering. Projected layers
 support orthographic or perspective cameras, timestamp-based rotation, zoom,
 pan, height/distance/state/fixed coloring, depth shading, vignetting, automatic
-or fixed voxel scale, and optional surface extraction. The 3D custom-rule
-editor, fades, trails, and extruded Wolfram 3D remain later milestones.
+or fixed voxel scale, and optional surface extraction. Reference-compatible
+extruded Wolfram 3D histories support all rules 0–255, centered depth bands,
+and single, random, or explicit-bit source rows. The 3D custom-rule editor,
+fades, and trails remain later milestones.
 
 ## 1. Summary
 
@@ -248,6 +250,12 @@ All elementary Wolfram rules from 0 through 255 are supported.
 
 - `wolfram_2d`: a 1D row evolves and scrolls through a 2D grid. Each generation removes the oldest row and appends the newest row.
 - `wolfram_3d_extruded`: the same evolving row is extruded through a configurable depth band and scrolled through the 3D grid, matching the visual idea in the reference server.
+
+The implemented 3D mode matches the reference axis layout: X is the wrapped
+elementary row, Y is a centered band with default depth
+`max(1, grid_size // 4)`, and Z is the scrolling history. The surrounding
+volume boundary is fixed. Both isometric and projected voxel renderers may be
+used without changing simulation behavior.
 - The Wolfram horizontal boundary wraps.
 - Initial row modes are `single_center`, `random`, and explicit `bits`.
 - A new 2D Wolfram grid is prefilled from top to bottom with successive

@@ -282,3 +282,32 @@ def test_switch_3d_layer_to_projected_camera_controls() -> None:
     assert not inspector._perspectiveStrength.isVisibleTo(inspector)
     window._setDirty(False)
     window.close()
+
+
+def test_add_and_edit_wolfram_3d_layer() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+
+    window._addWolfram3DLayer()
+    inspector = window.inspector
+    inspector._wolframRule.setValue(122)
+    inspector._extrusionDepth.setValue(5)
+    inspector._initialType.setCurrentIndex(inspector._initialType.findData("bits"))
+    inspector._bits.setText("10110")
+    inspector._bits.editingFinished.emit()
+    app.processEvents()
+
+    layer = window.project.layer
+    assert layer.simulationMode == "wolfram_3d_extruded"
+    assert layer.wolframRule == 122
+    assert layer.extrusionDepth == 5
+    assert layer.initial.bits == (1, 0, 1, 1, 0)
+    assert layer.palette == "wolfram3d"
+    assert window._layerList.item(0).text().endswith("W3D")
+    assert "W122" in window._infoLabel.text()
+    assert inspector._wolframRule.isVisibleTo(inspector)
+    assert inspector._extrusionDepth.isVisibleTo(inspector)
+    assert not inspector._rule3D.isVisibleTo(inspector)
+    assert not inspector._boundary.isVisibleTo(inspector)
+    window._setDirty(False)
+    window.close()

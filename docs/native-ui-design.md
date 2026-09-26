@@ -389,7 +389,7 @@ The first milestone targeted the implemented 2D engine before the full version
     path.
 
 Multi-layer composition, per-layer seed overrides, export-relative cell sizing,
-`wolfram_2d`, and both 3D renderers have since been completed. The Wolfram inspector replaces
+`wolfram_2d`, `wolfram_3d_extruded`, and both 3D renderers have since been completed. The Wolfram inspector replaces
 outer-totalistic rule controls with a rule-number field from 0 through 255 and
 offers center-cell, seeded-random, and explicit-bit starting rows. The Add Layer
 menu creates an outer-totalistic 2D layer, a Wolfram 2D history layer, or an
@@ -399,6 +399,10 @@ voxel scale, surface-only extraction, opacity, seed, and timing controls.
 Projected style additionally exposes fixed/state/height/distance coloring,
 depth shading, vignette, orthographic/perspective projection, azimuth,
 elevation, zoom, rotation rate, and normalized pan controls.
+The Add Layer menu also provides a dedicated Wolfram 3D Extrusion entry. Its
+inspector exposes rule number, cubic history size, centered extrusion depth,
+and single/random/explicit-bit source rows while hiding the inapplicable 3D
+outer-totalistic rule and volume-boundary controls.
 
 Advanced gradients/trails, direct cell painting, and arbitrary timeline
 scrubbing remain visible in the overall design but are not yet implemented.

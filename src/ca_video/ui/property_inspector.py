@@ -146,13 +146,24 @@ class PropertyInspector(QWidget):
         self._radius.setValue(initial.radius)
         self._origin.setCurrentIndex(max(0, self._origin.findData(initial.origin)))
         if isinstance(layer, Layer3DConfig):
-            self._rule3D.setCurrentIndex(max(0, self._rule3D.findData(layer.rulePreset)))
+            self._simulationMode3D.setCurrentIndex(
+                max(0, self._simulationMode3D.findData(layer.simulationMode))
+            )
+            if layer.rulePreset is not None:
+                self._rule3D.setCurrentIndex(max(0, self._rule3D.findData(layer.rulePreset)))
+            self._wolframRule.setValue(layer.wolframRule if layer.wolframRule is not None else 30)
             self._gridSize3D.setValue(layer.gridSize)
-            self._populateInitialTypes("3d", initial.type)
+            self._extrusionDepth.setMaximum(layer.gridSize)
+            self._extrusionDepth.setValue(layer.extrusionDepth)
+            self._populateInitialTypes(
+                "wolfram_3d_extruded" if layer.simulationMode == "wolfram_3d_extruded" else "3d",
+                initial.type,
+            )
             self._cells.setPlainText(
                 "\n".join(f"{xValue},{yValue},{zValue}" for xValue, yValue, zValue in initial.cells)
             )
             self._cells.setPlaceholderText("One x,y,z voxel coordinate per line")
+            self._bits.setText("".join(str(bit) for bit in initial.bits) or "1")
             self._palette3D.setCurrentIndex(max(0, self._palette3D.findData(layer.palette)))
             self._renderStyle3D.setCurrentIndex(max(0, self._renderStyle3D.findData(layer.renderStyle)))
             self._voxelScale.setValue(layer.voxelScale)
@@ -238,13 +249,26 @@ class PropertyInspector(QWidget):
             layerData.pop("seed", None)
         layer = self._project.layers[self._layerIndex]
         if isinstance(layer, Layer3DConfig):
-            simulationData["mode"] = "outer_totalistic"
-            simulationData["rule"] = {"preset": self._rule3D.currentData()}
+            simulationMode3D = self._simulationMode3D.currentData()
+            simulationData["mode"] = simulationMode3D
+            simulationData["rule"] = (
+                {"number": self._wolframRule.value()}
+                if simulationMode3D == "wolfram_3d_extruded"
+                else {"preset": self._rule3D.currentData()}
+            )
             simulationData["grid"] = {
                 "grid_size": self._gridSize3D.value(),
-                "boundary": self._boundary.currentData(),
+                "boundary": (
+                    "fixed"
+                    if simulationMode3D == "wolfram_3d_extruded"
+                    else self._boundary.currentData()
+                ),
             }
             simulationData["initial"] = self._initialData()
+            if simulationMode3D == "wolfram_3d_extruded":
+                simulationData["extrusion_depth"] = self._extrusionDepth.value()
+            else:
+                simulationData.pop("extrusion_depth", None)
             renderStyle = self._renderStyle3D.currentData()
             renderData: dict[str, object] = {
                 "style": renderStyle,
@@ -343,6 +367,9 @@ class PropertyInspector(QWidget):
         self._simulationMode = QComboBox()
         self._simulationMode.addItem("Outer-totalistic 2D", "outer_totalistic")
         self._simulationMode.addItem("Wolfram scrolling history", "wolfram_2d")
+        self._simulationMode3D = QComboBox()
+        self._simulationMode3D.addItem("Outer-totalistic 3D", "outer_totalistic")
+        self._simulationMode3D.addItem("Wolfram 3D extrusion", "wolfram_3d_extruded")
         self._rulePreset = QComboBox()
         previousCategory = None
         for entry in ruleCatalog():
@@ -375,6 +402,7 @@ class PropertyInspector(QWidget):
         self._gridWidth = self._spinBox(8, 2048)
         self._gridHeight = self._spinBox(8, 2048)
         self._gridSize3D = self._spinBox(8, 80)
+        self._extrusionDepth = self._spinBox(1, 80)
         self._cellSize = self._spinBox(1, 128, " px")
         self._derivedGrid = QLabel()
         self._derivedGrid.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -382,6 +410,7 @@ class PropertyInspector(QWidget):
         self._boundary.addItem("Wrap", "wrap")
         self._boundary.addItem("Fixed", "fixed")
         simulationForm.addRow("Rule type", self._simulationMode)
+        simulationForm.addRow("3D rule type", self._simulationMode3D)
         simulationForm.addRow("Rule", self._rulePreset)
         simulationForm.addRow("3D rule", self._rule3D)
         simulationForm.addRow("Notation", self._customNotation)
@@ -391,6 +420,7 @@ class PropertyInspector(QWidget):
         simulationForm.addRow("Grid width", self._gridWidth)
         simulationForm.addRow("Grid height", self._gridHeight)
         simulationForm.addRow("Cubic grid", self._gridSize3D)
+        simulationForm.addRow("Extrusion depth", self._extrusionDepth)
         simulationForm.addRow("Cell size", self._cellSize)
         simulationForm.addRow("Derived grid", self._derivedGrid)
         simulationForm.addRow("Boundary", self._boundary)
@@ -500,6 +530,7 @@ class PropertyInspector(QWidget):
         layout.addStretch(1)
 
         self._simulationMode.currentIndexChanged.connect(self._simulationModeChanged)
+        self._simulationMode3D.currentIndexChanged.connect(self._simulationMode3DChanged)
         self._rulePreset.currentIndexChanged.connect(self._ruleChanged)
         self._rule3D.currentIndexChanged.connect(lambda _value: self._emitChange(True))
         self._gridMode.currentIndexChanged.connect(self._gridModeChanged)
@@ -514,7 +545,7 @@ class PropertyInspector(QWidget):
             self._wolframRule,
             self._gridWidth,
             self._gridHeight,
-            self._gridSize3D,
+            self._extrusionDepth,
             self._boundary,
             self._density,
             self._radius,
@@ -527,6 +558,7 @@ class PropertyInspector(QWidget):
                 control, QComboBox
             ) else control.valueChanged.connect(lambda _value: self._emitChange(True))
         self._cellSize.valueChanged.connect(self._cellSizeChanged)
+        self._gridSize3D.valueChanged.connect(self._gridSize3DChanged)
         self._cells.textChanged.connect(self._queueTextChange)
         self._rle.textChanged.connect(self._queueTextChange)
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
@@ -662,6 +694,19 @@ class PropertyInspector(QWidget):
         self._syncSimulationControls()
         self._emitChange(True)
 
+    # :: VOID -> NONE
+    # Switches the contextual three-dimensional simulation family
+    def _simulationMode3DChanged(self) -> None:
+        simulationMode = self._simulationMode3D.currentData()
+        defaultInitial = "single_center" if simulationMode == "wolfram_3d_extruded" else "random"
+        self._populateInitialTypes(simulationMode, defaultInitial)
+        if simulationMode == "wolfram_3d_extruded":
+            self._boundary.setCurrentIndex(max(0, self._boundary.findData("fixed")))
+            if self._palette3D.currentData() != "wolfram3d":
+                self._palette3D.setCurrentIndex(max(0, self._palette3D.findData("wolfram3d")))
+        self._syncSimulationControls()
+        self._emitChange(True)
+
     # :: STRING, STRING -> NONE
     # Rebuilds initializer choices for the selected simulation family
     def _populateInitialTypes(self, simulationMode: str, selectedType: str) -> None:
@@ -676,7 +721,7 @@ class PropertyInspector(QWidget):
                 ("Single center voxel", "single"),
                 ("Orthogonal cross", "cross"),
             )
-        elif simulationMode == "wolfram_2d":
+        elif simulationMode in {"wolfram_2d", "wolfram_3d_extruded"}:
             choices = (
                 ("Single center cell", "single_center"),
                 ("Seeded random row", "random"),
@@ -700,12 +745,19 @@ class PropertyInspector(QWidget):
     # Shows controls belonging to the active simulation family
     def _syncSimulationControls(self) -> None:
         is3D = self._is3DLayer()
-        wolfram = self._simulationMode.currentData() == "wolfram_2d"
+        wolfram2D = self._simulationMode.currentData() == "wolfram_2d"
+        wolfram3D = is3D and self._simulationMode3D.currentData() == "wolfram_3d_extruded"
         self._setFieldVisible(self._simulationForm, self._simulationMode, not is3D)
-        self._setFieldVisible(self._simulationForm, self._rulePreset, not is3D and not wolfram)
-        self._setFieldVisible(self._simulationForm, self._rule3D, is3D)
-        self._setFieldVisible(self._simulationForm, self._wolframRule, not is3D and wolfram)
-        self._setFieldVisible(self._simulationForm, self._boundary, is3D or not wolfram)
+        self._setFieldVisible(self._simulationForm, self._simulationMode3D, is3D)
+        self._setFieldVisible(self._simulationForm, self._rulePreset, not is3D and not wolfram2D)
+        self._setFieldVisible(self._simulationForm, self._rule3D, is3D and not wolfram3D)
+        self._setFieldVisible(self._simulationForm, self._wolframRule, wolfram2D or wolfram3D)
+        self._setFieldVisible(self._simulationForm, self._extrusionDepth, wolfram3D)
+        self._setFieldVisible(
+            self._simulationForm,
+            self._boundary,
+            (is3D and not wolfram3D) or (not is3D and not wolfram2D),
+        )
         self._syncRuleControls()
         self._syncInitialControls()
 
@@ -749,6 +801,12 @@ class PropertyInspector(QWidget):
     # Recalculates the grid readout after an export-relative cell-size change
     def _cellSizeChanged(self) -> None:
         self._syncGridControls()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Keeps the Wolfram extrusion band within the cubic grid
+    def _gridSize3DChanged(self) -> None:
+        self._extrusionDepth.setMaximum(self._gridSize3D.value())
         self._emitChange(True)
 
     # :: VOID -> NONE

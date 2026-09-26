@@ -20,8 +20,9 @@ from ca_video.simulation.initialization_3d import initializeGrid3D  # Build star
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
 from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D automata
 from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
+from ca_video.simulation.wolfram_3d import WolframEngine3D  # Evolve extruded elementary histories
 
-SimulationEngine = OuterTotalisticEngine | OuterTotalisticEngine3D | WolframEngine
+SimulationEngine = OuterTotalisticEngine | OuterTotalisticEngine3D | WolframEngine | WolframEngine3D
 LayerRenderer = Renderer2D | Renderer3D | ProjectedRenderer3D
 
 
@@ -170,6 +171,25 @@ class ProjectRuntime:
     # Creates one deterministically initialized layer engine
     def _createEngine(self, layer: LayerConfig) -> SimulationEngine:
         if isinstance(layer, Layer3DConfig):
+            if layer.simulationMode == "wolfram_3d_extruded":
+                ruleNumber = layer.wolframRule or 0
+                if not layer.enabled:
+                    return WolframEngine3D.blank(layer.gridSize, ruleNumber, layer.extrusionDepth)
+                initialWolfram = layer.initial
+                resolvedWolframSeed = (
+                    layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id)
+                )
+                return WolframEngine3D(
+                    layer.gridSize,
+                    ruleNumber,
+                    initialWolfram.type,
+                    initialWolfram.density,
+                    resolvedWolframSeed,
+                    initialWolfram.bits,
+                    layer.extrusionDepth,
+                )
+            if layer.rule is None:
+                raise ValueError("outer-totalistic 3D layer is missing its rule")
             if not layer.enabled:
                 grid3D = np.zeros((layer.gridSize, layer.gridSize, layer.gridSize), dtype=np.uint8)
                 return OuterTotalisticEngine3D(grid3D, layer.rule, layer.boundary)
@@ -269,7 +289,7 @@ class ProjectRuntime:
                         layer.colorBy,
                         layer.depthShading,
                         layer.vignette,
-                        layer.rule.states,
+                        layer.rule.states if layer.rule is not None else 2,
                     )
                 else:
                     renderers[layer.id] = Renderer3D(

@@ -5,8 +5,9 @@ Native Python/PySide6 application for previewing and exporting deterministic cel
 The current editable milestone supports ordered deterministic 2D and 3D layers
 with independent rules and timing. It includes the complete reference 2D and 3D
 rule catalogs, custom 2D B/S/C rules, elementary Wolfram rules 0–255 rendered as
-scrolling histories, isometric surface voxels, and camera-projected voxels with
-perspective, time-based rotation, positional coloring, and depth buffering.
+scrolling histories, reference-style extruded Wolfram 3D volumes, isometric
+surface voxels, and camera-projected voxels with perspective, time-based
+rotation, positional coloring, and depth buffering.
 Global and optional per-layer seeds, multiple initial-condition types,
 native project editing and persistence, preview controls, mixed-dimensional
 composition, and H.264 MP4 export through FFmpeg share one deterministic
@@ -58,6 +59,12 @@ Open the camera-projected crystal example:
 
 ```bash
 uv run ca-video gui examples/projected-crystal.cav.json
+```
+
+Open the extruded Wolfram Rule 30 example:
+
+```bash
+uv run ca-video gui examples/wolfram-3d-rule-30.cav.json
 ```
 
 Validate or render without the GUI:

@@ -4,6 +4,7 @@ from ca_video.config.models import defaultProject, parseProject  # Create determ
 from ca_video.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
 from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Identify voxel runtime layers
 from ca_video.simulation.wolfram import WolframEngine  # Identify Wolfram runtime layers
+from ca_video.simulation.wolfram_3d import WolframEngine3D  # Identify extruded Wolfram layers
 
 
 def test_runtime_is_deterministic_and_frame_zero_is_initial_state() -> None:
@@ -232,3 +233,33 @@ def test_projected_camera_matches_at_equal_preview_and_export_times() -> None:
     exportFrame = exportRuntime.renderFrame(30)
 
     np.testing.assert_array_equal(previewFrame, exportFrame)
+
+
+def test_wolfram_3d_uses_shared_timing_and_renderer_pipeline() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0] = {
+        "id": "wolfram_3d",
+        "name": "Wolfram 3D",
+        "dimension": "3d",
+        "step_interval_ms": 200,
+        "simulation": {
+            "mode": "wolfram_3d_extruded",
+            "grid": {"grid_size": 20, "boundary": "fixed"},
+            "rule": {"number": 30},
+            "initial": {"type": "single_center"},
+            "extrusion_depth": 5,
+        },
+        "render": {
+            "style": "projected_voxel",
+            "palette": "wolfram3d",
+            "surface_only": True,
+        },
+    }
+    runtime = ProjectRuntime(parseProject(data), (320, 180))
+
+    frame = runtime.renderAtTick(6, 30)
+
+    assert isinstance(runtime.engine, WolframEngine3D)
+    assert runtime.engine.generation == 1
+    assert frame.shape == (180, 320, 3)
+    assert frame.max() > 0
