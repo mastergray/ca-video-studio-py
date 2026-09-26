@@ -9,6 +9,7 @@ scrolling histories, reference-style extruded Wolfram 3D volumes, isometric
 surface voxels, and camera-projected voxels with perspective, time-based
 rotation, positional coloring, and depth buffering.
 Global and optional per-layer seeds, multiple initial-condition types,
+simulation-space offsets for geometric 3D seeds and Wolfram extrusion bands,
 native project editing and persistence, preview controls, mixed-dimensional
 composition, and H.264 MP4 export through FFmpeg share one deterministic
 pipeline. The broader product is defined in

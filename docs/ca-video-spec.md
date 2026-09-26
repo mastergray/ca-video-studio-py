@@ -13,7 +13,7 @@ rendering, and depth-buffered `projected_voxel` rendering. Projected layers
 support orthographic or perspective cameras, timestamp-based rotation, zoom,
 pan, height/distance/state/fixed coloring, depth shading, vignetting, automatic
 or fixed voxel scale, and optional surface extraction. Reference-compatible
-extruded Wolfram 3D histories support all rules 0–255, centered depth bands,
+extruded Wolfram 3D histories support all rules 0–255, positionable depth bands,
 and single, random, or explicit-bit source rows. The 3D custom-rule editor,
 fades, and trails remain later milestones.
 
@@ -256,6 +256,9 @@ elementary row, Y is a centered band with default depth
 `max(1, grid_size // 4)`, and Z is the scrolling history. The surrounding
 volume boundary is fixed. Both isometric and projected voxel renderers may be
 used without changing simulation behavior.
+- `extrusion_offset` moves the depth band along Y in logical voxels. Positive
+  values move it toward increasing Y; voxels beyond the fixed volume are
+  clipped. Zero is omitted from normalized project JSON.
 - The Wolfram horizontal boundary wraps.
 - Initial row modes are `single_center`, `random`, and explicit `bits`.
 - A new 2D Wolfram grid is prefilled from top to bottom with successive
@@ -321,6 +324,12 @@ Initialization requirements:
   against its smaller raster.
 - Offset geometric shapes clip at fixed grid edges and wrap deterministically
   at wrapped edges. A zero offset is omitted from normalized project JSON.
+- Three-dimensional `center_block`, `sphere`, `single`, and `cross`
+  initializers accept optional `offset_cells: [x, y, z]` values from -80
+  through 80. Positive X moves right, positive Y moves along the grid depth
+  axis, and positive Z moves upward in simulation space. Fixed grids clip the
+  displaced seed and wrapped grids wrap it. These offsets position the seed
+  itself and are independent of projected-renderer camera pan.
 
 ## 10. Layers and composition
 

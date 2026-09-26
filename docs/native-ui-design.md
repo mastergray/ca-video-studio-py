@@ -238,8 +238,9 @@ The inspector has two top-level tabs.
   boundary, and number of states.
 - **Initial Condition:** initializer type, seed override, and
   initializer-specific values such as density, radius, export-pixel X/Y
-  offsets, cells, or RLE file. Offset controls appear only for 2D center-block
-  and disc initializers.
+  offsets, logical-voxel X/Y/Z offsets, cells, or RLE file. Pixel controls
+  appear only for 2D center-block and disc initializers; voxel controls appear
+  only for geometric outer-totalistic 3D initializers.
 - **Appearance:** 2D colors/gradient/trail/opacity or 3D palette/render
   style/coloring/voxel scale.
 - **Timing:** step interval and visual fade settings.
@@ -400,7 +401,7 @@ Projected style additionally exposes fixed/state/height/distance coloring,
 depth shading, vignette, orthographic/perspective projection, azimuth,
 elevation, zoom, rotation rate, and normalized pan controls.
 The Add Layer menu also provides a dedicated Wolfram 3D Extrusion entry. Its
-inspector exposes rule number, cubic history size, centered extrusion depth,
+inspector exposes rule number, cubic history size, extrusion depth and Y offset,
 and single/random/explicit-bit source rows while hiding the inapplicable 3D
 outer-totalistic rule and volume-boundary controls.
 

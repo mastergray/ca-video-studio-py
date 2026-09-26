@@ -260,7 +260,7 @@ def test_projected_camera_and_render_controls_round_trip() -> None:
             "mode": "outer_totalistic",
             "grid": {"grid_size": 20, "boundary": "fixed"},
             "rule": {"preset": "crystal"},
-            "initial": {"type": "cross"},
+            "initial": {"type": "cross", "offset_cells": [3, -2, 1]},
         },
         "render": {
             "style": "projected_voxel",
@@ -283,8 +283,14 @@ def test_projected_camera_and_render_controls_round_trip() -> None:
     assert normalized.layer.camera.zoom == 1.4
     assert normalized.layer.camera.panX == 0.2
     assert normalized.layer.camera.elevationDeg == 20
+    assert normalized.layer.initial.offsetCells == (3, -2, 1)
+    assert normalized.toDict()["layers"][0]["simulation"]["initial"]["offset_cells"] == [3, -2, 1]
     assert not normalized.layer.depthShading
     assert normalized.layer.vignette
+
+    data["layers"][0]["simulation"]["initial"]["offset_cells"] = [0, 0, 0]
+    zeroOffset = parseProject(data).toDict()["layers"][0]["simulation"]["initial"]
+    assert "offset_cells" not in zeroOffset
 
 
 def test_isometric_style_rejects_projected_only_controls() -> None:
@@ -323,6 +329,7 @@ def test_wolfram_3d_extrusion_round_trips_family_specific_fields() -> None:
             "rule": {"number": 110},
             "initial": {"type": "bits", "bits": [1, 0, 1, 1]},
             "extrusion_depth": 7,
+            "extrusion_offset": -4,
         },
         "render": {
             "style": "projected_voxel",
@@ -341,7 +348,31 @@ def test_wolfram_3d_extrusion_round_trips_family_specific_fields() -> None:
     assert normalized.layer.rulePreset is None
     assert normalized.layer.initial.bits == (1, 0, 1, 1)
     assert normalized.layer.extrusionDepth == 7
+    assert normalized.layer.extrusionOffset == -4
     assert normalized.layer.palette == "wolfram3d"
+
+    data["layers"][0]["simulation"]["extrusion_offset"] = 0
+    zeroOffset = parseProject(data).toDict()["layers"][0]["simulation"]
+    assert "extrusion_offset" not in zeroOffset
+
+
+def test_3d_offsets_are_limited_to_their_supported_initializers() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0] = {
+        "id": "voxels",
+        "name": "Voxels",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 16, "boundary": "fixed"},
+            "rule": {"preset": "445"},
+            "initial": {"type": "random", "offset_cells": [1, 0, 0]},
+        },
+        "render": {"style": "isometric_voxel", "palette": "445"},
+    }
+
+    with pytest.raises(ConfigError, match="geometric 3D initializers"):
+        parseProject(data)
 
 
 def test_wolfram_3d_requires_fixed_volume_and_fitting_extrusion() -> None:

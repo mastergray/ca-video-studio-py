@@ -7,10 +7,10 @@ Grid3D = NDArray[np.uint8]
 Row = NDArray[np.uint8]
 
 
-# Evolves an elementary automaton as a centered extruded 3D history
+# Evolves an elementary automaton as a positionable extruded 3D history
 class WolframEngine3D:
 
-    # CONSTRUCTOR :: INT, INT, STRING, FLOAT, INT, (INT), INT -> wolframEngine3D
+    # CONSTRUCTOR :: INT, INT, STRING, FLOAT, INT, (INT), INT, INT -> wolframEngine3D
     # Creates a deterministic, prefilled extruded Wolfram volume
     def __init__(
         self,
@@ -21,6 +21,7 @@ class WolframEngine3D:
         seed: int = 0,
         bits: tuple[int, ...] = (),
         extrusionDepth: int | None = None,
+        extrusionOffset: int = 0,
     ) -> None:
         if gridSize < 1:
             raise ValueError("Wolfram 3D grid size must be positive")
@@ -39,9 +40,12 @@ class WolframEngine3D:
         resolvedDepth = extrusionDepth if extrusionDepth is not None else max(1, gridSize // 4)
         if not 1 <= resolvedDepth <= gridSize:
             raise ValueError("Wolfram extrusion depth must fit within the grid")
+        if not -gridSize <= extrusionOffset <= gridSize:
+            raise ValueError("Wolfram extrusion offset must not exceed the grid size")
 
         self._ruleNumber = ruleNumber
         self._extrusionDepth = resolvedDepth
+        self._extrusionOffset = extrusionOffset
         self._generation = 0
         self._row = self._initialRow(gridSize, initialType, density, seed, bits)
         self._grid = np.zeros((gridSize, gridSize, gridSize), dtype=np.uint8)
@@ -72,6 +76,12 @@ class WolframEngine3D:
     @property
     def extrusionDepth(self) -> int:
         return self._extrusionDepth
+
+    # PROPERTY :: VOID -> INT
+    # Returns the extrusion band's displacement along the Y axis
+    @property
+    def extrusionOffset(self) -> int:
+        return self._extrusionOffset
 
     # PROPERTY :: VOID -> INT
     # Returns the number of scrolling steps since initialization
@@ -126,19 +136,29 @@ class WolframEngine3D:
         return ((self._ruleNumber >> patterns) & 1).astype(np.uint8)
 
     # :: INT, row -> NONE
-    # Writes one row through the centered Y-axis extrusion band
+    # Writes one row through the offset Y-axis extrusion band with fixed clipping
     def _writeSlice(self, zIndex: int, row: Row) -> None:
-        startY = (self._grid.shape[1] - self._extrusionDepth) // 2
+        startY = (self._grid.shape[1] - self._extrusionDepth) // 2 + self._extrusionOffset
         endY = startY + self._extrusionDepth
-        self._grid[zIndex, startY:endY, :] = row
+        clippedStart = max(0, startY)
+        clippedEnd = min(self._grid.shape[1], endY)
+        if clippedStart < clippedEnd:
+            self._grid[zIndex, clippedStart:clippedEnd, :] = row
 
-    # Class Factory Method :: INT, INT, INT -> wolframEngine3D
+    # Class Factory Method :: INT, INT, INT, INT -> wolframEngine3D
     # Creates an inert zero volume for a disabled layer
     @classmethod
-    def blank(cls, gridSize: int, ruleNumber: int, extrusionDepth: int) -> WolframEngine3D:
+    def blank(
+        cls,
+        gridSize: int,
+        ruleNumber: int,
+        extrusionDepth: int,
+        extrusionOffset: int = 0,
+    ) -> WolframEngine3D:
         instance = cls.__new__(cls)
         instance._ruleNumber = ruleNumber
         instance._extrusionDepth = extrusionDepth
+        instance._extrusionOffset = extrusionOffset
         instance._generation = 0
         instance._row = np.zeros(gridSize, dtype=np.uint8)
         instance._grid = np.zeros((gridSize, gridSize, gridSize), dtype=np.uint8)

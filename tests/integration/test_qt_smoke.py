@@ -235,6 +235,9 @@ def test_add_and_edit_3d_layer() -> None:
     inspector._rule3D.setCurrentIndex(inspector._rule3D.findData("crystal"))
     inspector._gridSize3D.setValue(20)
     inspector._initialType.setCurrentIndex(inspector._initialType.findData("cross"))
+    inspector._offsetX3D.setValue(3)
+    inspector._offsetY3D.setValue(-2)
+    inspector._offsetZ3D.setValue(1)
     inspector._palette3D.setCurrentIndex(inspector._palette3D.findData("crystal"))
     app.processEvents()
 
@@ -243,9 +246,14 @@ def test_add_and_edit_3d_layer() -> None:
     assert layer.rulePreset == "crystal"
     assert layer.gridSize == 20
     assert layer.initial.type == "cross"
+    assert layer.initial.offsetCells == (3, -2, 1)
+    assert window.runtime.engine.grid[11, 8, 13] == 1
     assert window._layerList.item(0).text().endswith("3D")
     assert "20³" in window._infoLabel.text()
     assert inspector._rule3D.isVisibleTo(inspector)
+    assert inspector._offsetX3D.isVisibleTo(inspector)
+    assert inspector._offsetY3D.isVisibleTo(inspector)
+    assert inspector._offsetZ3D.isVisibleTo(inspector)
     assert not inspector._simulationMode.isVisibleTo(inspector)
     window._setDirty(False)
     window.close()
@@ -292,6 +300,7 @@ def test_add_and_edit_wolfram_3d_layer() -> None:
     inspector = window.inspector
     inspector._wolframRule.setValue(122)
     inspector._extrusionDepth.setValue(5)
+    inspector._extrusionOffset.setValue(-3)
     inspector._initialType.setCurrentIndex(inspector._initialType.findData("bits"))
     inspector._bits.setText("10110")
     inspector._bits.editingFinished.emit()
@@ -301,12 +310,15 @@ def test_add_and_edit_wolfram_3d_layer() -> None:
     assert layer.simulationMode == "wolfram_3d_extruded"
     assert layer.wolframRule == 122
     assert layer.extrusionDepth == 5
+    assert layer.extrusionOffset == -3
+    assert window.runtime.engine.extrusionOffset == -3
     assert layer.initial.bits == (1, 0, 1, 1, 0)
     assert layer.palette == "wolfram3d"
     assert window._layerList.item(0).text().endswith("W3D")
     assert "W122" in window._infoLabel.text()
     assert inspector._wolframRule.isVisibleTo(inspector)
     assert inspector._extrusionDepth.isVisibleTo(inspector)
+    assert inspector._extrusionOffset.isVisibleTo(inspector)
     assert not inspector._rule3D.isVisibleTo(inspector)
     assert not inspector._boundary.isVisibleTo(inspector)
     window._setDirty(False)

@@ -174,7 +174,12 @@ class ProjectRuntime:
             if layer.simulationMode == "wolfram_3d_extruded":
                 ruleNumber = layer.wolframRule or 0
                 if not layer.enabled:
-                    return WolframEngine3D.blank(layer.gridSize, ruleNumber, layer.extrusionDepth)
+                    return WolframEngine3D.blank(
+                        layer.gridSize,
+                        ruleNumber,
+                        layer.extrusionDepth,
+                        layer.extrusionOffset,
+                    )
                 initialWolfram = layer.initial
                 resolvedWolframSeed = (
                     layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id)
@@ -187,6 +192,7 @@ class ProjectRuntime:
                     resolvedWolframSeed,
                     initialWolfram.bits,
                     layer.extrusionDepth,
+                    layer.extrusionOffset,
                 )
             if layer.rule is None:
                 raise ValueError("outer-totalistic 3D layer is missing its rule")
@@ -204,6 +210,7 @@ class ProjectRuntime:
                 initial3D.cells,
                 initial3D.origin,
                 layer.boundary,
+                initial3D.offsetCells,
             )
             return OuterTotalisticEngine3D(grid3D, layer.rule, layer.boundary)
         if not layer.enabled:

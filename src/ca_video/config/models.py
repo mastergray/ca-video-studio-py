@@ -469,7 +469,7 @@ class Layer2DConfig:
 # Stores validated settings for a three-dimensional initializer
 class Initial3DConfig:
 
-    # CONSTRUCTOR :: STRING, FLOAT, INT, ((INT, INT, INT)), STRING, (INT) -> initial3DConfig
+    # CONSTRUCTOR :: STRING, FLOAT, INT, ((INT, INT, INT)), STRING, (INT), (INT, INT, INT) -> initial3DConfig
     # Creates immutable-by-convention voxel initialization settings
     def __init__(
         self,
@@ -479,6 +479,7 @@ class Initial3DConfig:
         cells: tuple[tuple[int, int, int], ...] = (),
         origin: str = "center",
         bits: tuple[int, ...] = (),
+        offsetCells: tuple[int, int, int] = (0, 0, 0),
     ) -> None:
         self._type = type
         self._density = density
@@ -486,6 +487,7 @@ class Initial3DConfig:
         self._cells = cells
         self._origin = origin
         self._bits = bits
+        self._offsetCells = offsetCells
 
     # PROPERTY :: VOID -> STRING
     # Returns the initializer type
@@ -522,6 +524,12 @@ class Initial3DConfig:
     @property
     def bits(self) -> tuple[int, ...]:
         return self._bits
+
+    # PROPERTY :: VOID -> (INT, INT, INT)
+    # Returns the geometric seed displacement from grid center
+    @property
+    def offsetCells(self) -> tuple[int, int, int]:
+        return self._offsetCells
 
 
 # Stores deterministic camera settings for projected voxel rendering
@@ -601,7 +609,7 @@ class CameraConfig:
 # Stores validated settings for a three-dimensional voxel layer
 class Layer3DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule?, STRING?, initial3DConfig, INT?, STRING, INT, BOOL, STRING, STRING, BOOL, BOOL, cameraConfig?, STRING, INT?, INT -> layer3DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule?, STRING?, initial3DConfig, INT?, STRING, INT, BOOL, STRING, STRING, BOOL, BOOL, cameraConfig?, STRING, INT?, INT, INT -> layer3DConfig
     # Creates immutable-by-convention 3D layer settings
     def __init__(
         self,
@@ -628,6 +636,7 @@ class Layer3DConfig:
         simulationMode: str = "outer_totalistic",
         wolframRule: int | None = None,
         extrusionDepth: int = 1,
+        extrusionOffset: int = 0,
     ) -> None:
         self._id = id
         self._name = name
@@ -652,6 +661,7 @@ class Layer3DConfig:
         self._simulationMode = simulationMode
         self._wolframRule = wolframRule
         self._extrusionDepth = extrusionDepth
+        self._extrusionOffset = extrusionOffset
 
     # PROPERTY :: VOID -> STRING
     # Returns the layer dimensionality
@@ -796,6 +806,12 @@ class Layer3DConfig:
     @property
     def extrusionDepth(self) -> int:
         return self._extrusionDepth
+
+    # PROPERTY :: VOID -> INT
+    # Returns the Wolfram depth-band displacement from grid center
+    @property
+    def extrusionOffset(self) -> int:
+        return self._extrusionOffset
 
 
 LayerConfig = Layer2DConfig | Layer3DConfig
@@ -957,6 +973,8 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
             initialData["density"] = initial.density
         if initial.type in {"center_block", "sphere"}:
             initialData["radius"] = initial.radius
+        if initial.type in {"center_block", "sphere", "single", "cross"} and initial.offsetCells != (0, 0, 0):
+            initialData["offset_cells"] = list(initial.offsetCells)
         if initial.type == "cells":
             initialData["origin"] = initial.origin
             initialData["cells"] = [list(cell) for cell in initial.cells]
@@ -990,6 +1008,8 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
         }
         if layer.simulationMode == "wolfram_3d_extruded":
             simulationData["extrusion_depth"] = layer.extrusionDepth
+            if layer.extrusionOffset:
+                simulationData["extrusion_offset"] = layer.extrusionOffset
         return {
             "id": layer.id,
             "name": layer.name,
@@ -1127,7 +1147,7 @@ def _parseLayer3D(
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
     _rejectUnknown(
         simulation,
-        {"mode", "grid", "rule", "initial", "extrusion_depth"},
+        {"mode", "grid", "rule", "initial", "extrusion_depth", "extrusion_offset"},
         "layers[0].simulation",
     )
     simulationMode = simulation.get("mode")
@@ -1147,6 +1167,7 @@ def _parseLayer3D(
     initialData = _asMapping(simulation.get("initial"), "layers[0].simulation.initial")
     wolframRule: int | None = None
     extrusionDepth = max(1, gridSize // 4)
+    extrusionOffset = 0
     if simulationMode == "wolfram_3d_extruded":
         _rejectUnknown(ruleData, {"number"}, "layers[0].simulation.rule")
         wolframRule = _asInteger(ruleData.get("number"), "layers[0].simulation.rule.number", 0, 255)
@@ -1156,6 +1177,12 @@ def _parseLayer3D(
             simulation.get("extrusion_depth", extrusionDepth),
             "layers[0].simulation.extrusion_depth",
             1,
+            gridSize,
+        )
+        extrusionOffset = _asInteger(
+            simulation.get("extrusion_offset", 0),
+            "layers[0].simulation.extrusion_offset",
+            -gridSize,
             gridSize,
         )
         _rejectUnknown(initialData, {"type", "density", "bits"}, "layers[0].simulation.initial")
@@ -1182,8 +1209,8 @@ def _parseLayer3D(
             )
         initial = Initial3DConfig(initialType, density, bits=bits)
     else:
-        if "extrusion_depth" in simulation:
-            raise ConfigError("extrusion_depth is supported only for wolfram_3d_extruded")
+        if "extrusion_depth" in simulation or "extrusion_offset" in simulation:
+            raise ConfigError("extrusion controls are supported only for wolfram_3d_extruded")
         _rejectUnknown(ruleData, {"preset"}, "layers[0].simulation.rule")
         rulePreset = ruleData.get("preset")
         if not isinstance(rulePreset, str):
@@ -1195,7 +1222,7 @@ def _parseLayer3D(
             raise ConfigError(str(error)) from error
         _rejectUnknown(
             initialData,
-            {"type", "density", "radius", "cells", "origin"},
+            {"type", "density", "radius", "cells", "origin", "offset_cells"},
             "layers[0].simulation.initial",
         )
         initialType = initialData.get("type")
@@ -1241,7 +1268,18 @@ def _parseLayer3D(
                         raise ConfigError(f"layers[0].simulation.initial.cells[{index}] is outside the fixed grid")
                 parsedCells.append(coordinates)
             cells = tuple(parsedCells)
-        initial = Initial3DConfig(initialType, density, radius, cells, origin)
+        offsetCells = (0, 0, 0)
+        if "offset_cells" in initialData:
+            if initialType not in {"center_block", "sphere", "single", "cross"}:
+                raise ConfigError("offset_cells is supported only for geometric 3D initializers")
+            offsetValues = initialData["offset_cells"]
+            if not isinstance(offsetValues, list) or len(offsetValues) != 3:
+                raise ConfigError("layers[0].simulation.initial.offset_cells must contain [x, y, z]")
+            offsetCells = tuple(
+                _asInteger(value, f"layers[0].simulation.initial.offset_cells[{axis}]", -80, 80)
+                for axis, value in enumerate(offsetValues)
+            )
+        initial = Initial3DConfig(initialType, density, radius, cells, origin, offsetCells=offsetCells)
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
     _rejectUnknown(
@@ -1320,6 +1358,7 @@ def _parseLayer3D(
         simulationMode,
         wolframRule,
         extrusionDepth,
+        extrusionOffset,
     )
 
 

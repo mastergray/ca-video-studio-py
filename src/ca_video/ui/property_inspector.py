@@ -155,6 +155,12 @@ class PropertyInspector(QWidget):
             self._gridSize3D.setValue(layer.gridSize)
             self._extrusionDepth.setMaximum(layer.gridSize)
             self._extrusionDepth.setValue(layer.extrusionDepth)
+            self._extrusionOffset.setRange(-layer.gridSize, layer.gridSize)
+            self._extrusionOffset.setValue(layer.extrusionOffset)
+            offsetX3D, offsetY3D, offsetZ3D = initial.offsetCells
+            self._offsetX3D.setValue(offsetX3D)
+            self._offsetY3D.setValue(offsetY3D)
+            self._offsetZ3D.setValue(offsetZ3D)
             self._populateInitialTypes(
                 "wolfram_3d_extruded" if layer.simulationMode == "wolfram_3d_extruded" else "3d",
                 initial.type,
@@ -267,8 +273,10 @@ class PropertyInspector(QWidget):
             simulationData["initial"] = self._initialData()
             if simulationMode3D == "wolfram_3d_extruded":
                 simulationData["extrusion_depth"] = self._extrusionDepth.value()
+                simulationData["extrusion_offset"] = self._extrusionOffset.value()
             else:
                 simulationData.pop("extrusion_depth", None)
+                simulationData.pop("extrusion_offset", None)
             renderStyle = self._renderStyle3D.currentData()
             renderData: dict[str, object] = {
                 "style": renderStyle,
@@ -403,6 +411,8 @@ class PropertyInspector(QWidget):
         self._gridHeight = self._spinBox(8, 2048)
         self._gridSize3D = self._spinBox(8, 80)
         self._extrusionDepth = self._spinBox(1, 80)
+        self._extrusionOffset = self._spinBox(-80, 80, " cells")
+        self._extrusionOffset.setToolTip("Move the Wolfram extrusion band along the Y axis")
         self._cellSize = self._spinBox(1, 128, " px")
         self._derivedGrid = QLabel()
         self._derivedGrid.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -421,6 +431,7 @@ class PropertyInspector(QWidget):
         simulationForm.addRow("Grid height", self._gridHeight)
         simulationForm.addRow("Cubic grid", self._gridSize3D)
         simulationForm.addRow("Extrusion depth", self._extrusionDepth)
+        simulationForm.addRow("Extrusion offset", self._extrusionOffset)
         simulationForm.addRow("Cell size", self._cellSize)
         simulationForm.addRow("Derived grid", self._derivedGrid)
         simulationForm.addRow("Boundary", self._boundary)
@@ -439,6 +450,12 @@ class PropertyInspector(QWidget):
         self._offsetX.setToolTip("Horizontal position relative to the export canvas center")
         self._offsetY = self._spinBox(-8192, 8192, " px")
         self._offsetY.setToolTip("Vertical position relative to the export canvas center")
+        self._offsetX3D = self._spinBox(-80, 80, " cells")
+        self._offsetX3D.setToolTip("Move a geometric seed right or left from grid center")
+        self._offsetY3D = self._spinBox(-80, 80, " cells")
+        self._offsetY3D.setToolTip("Move a geometric seed along the grid depth axis")
+        self._offsetZ3D = self._spinBox(-80, 80, " cells")
+        self._offsetZ3D.setToolTip("Move a geometric seed up or down from grid center")
         self._origin = QComboBox()
         self._origin.addItem("Centered", "center")
         self._origin.addItem("Absolute", "absolute")
@@ -455,6 +472,9 @@ class PropertyInspector(QWidget):
         initialForm.addRow("Radius", self._radius)
         initialForm.addRow("Offset X", self._offsetX)
         initialForm.addRow("Offset Y", self._offsetY)
+        initialForm.addRow("Seed offset X", self._offsetX3D)
+        initialForm.addRow("Seed offset Y", self._offsetY3D)
+        initialForm.addRow("Seed offset Z", self._offsetZ3D)
         initialForm.addRow("Coordinates", self._origin)
         initialForm.addRow("Cells", self._cells)
         initialForm.addRow("RLE", self._rle)
@@ -546,11 +566,15 @@ class PropertyInspector(QWidget):
             self._gridWidth,
             self._gridHeight,
             self._extrusionDepth,
+            self._extrusionOffset,
             self._boundary,
             self._density,
             self._radius,
             self._offsetX,
             self._offsetY,
+            self._offsetX3D,
+            self._offsetY3D,
+            self._offsetZ3D,
             self._origin,
             self._stepInterval,
         ):
@@ -753,6 +777,7 @@ class PropertyInspector(QWidget):
         self._setFieldVisible(self._simulationForm, self._rule3D, is3D and not wolfram3D)
         self._setFieldVisible(self._simulationForm, self._wolframRule, wolfram2D or wolfram3D)
         self._setFieldVisible(self._simulationForm, self._extrusionDepth, wolfram3D)
+        self._setFieldVisible(self._simulationForm, self._extrusionOffset, wolfram3D)
         self._setFieldVisible(
             self._simulationForm,
             self._boundary,
@@ -806,7 +831,9 @@ class PropertyInspector(QWidget):
     # :: VOID -> NONE
     # Keeps the Wolfram extrusion band within the cubic grid
     def _gridSize3DChanged(self) -> None:
-        self._extrusionDepth.setMaximum(self._gridSize3D.value())
+        gridSize = self._gridSize3D.value()
+        self._extrusionDepth.setMaximum(gridSize)
+        self._extrusionOffset.setRange(-gridSize, gridSize)
         self._emitChange(True)
 
     # :: VOID -> NONE
@@ -923,6 +950,14 @@ class PropertyInspector(QWidget):
             self._offsetY,
             not is3D and initialType in {"center_block", "disc"},
         )
+        geometric3D = (
+            is3D
+            and self._simulationMode3D.currentData() == "outer_totalistic"
+            and initialType in {"center_block", "sphere", "single", "cross"}
+        )
+        self._setFieldVisible(self._initialForm, self._offsetX3D, geometric3D)
+        self._setFieldVisible(self._initialForm, self._offsetY3D, geometric3D)
+        self._setFieldVisible(self._initialForm, self._offsetZ3D, geometric3D)
         self._setFieldVisible(self._initialForm, self._origin, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._cells, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._rle, initialType == "rle")
@@ -990,7 +1025,14 @@ class PropertyInspector(QWidget):
         initialType = self._initialType.currentData()
         is3D = self._is3DLayer()
         if initialType in {"single_center", "single", "cross"}:
-            return {"type": initialType}
+            data: dict[str, object] = {"type": initialType}
+            if is3D and initialType in {"single", "cross"}:
+                data["offset_cells"] = [
+                    self._offsetX3D.value(),
+                    self._offsetY3D.value(),
+                    self._offsetZ3D.value(),
+                ]
+            return data
         if initialType == "bits":
             compact = "".join(self._bits.text().split())
             if not compact or any(character not in "01" for character in compact):
@@ -1004,7 +1046,13 @@ class PropertyInspector(QWidget):
                 "density": self._density.value(),
                 "radius": self._radius.value(),
             }
-            if not is3D:
+            if is3D:
+                data["offset_cells"] = [
+                    self._offsetX3D.value(),
+                    self._offsetY3D.value(),
+                    self._offsetZ3D.value(),
+                ]
+            else:
                 data["offset_px"] = [self._offsetX.value(), self._offsetY.value()]
             return data
         if initialType == "cells":

@@ -38,3 +38,16 @@ def test_wolfram_3d_random_source_row_is_seeded() -> None:
 
     np.testing.assert_array_equal(first.grid, second.grid)
     assert not np.array_equal(first.grid, different.grid)
+
+
+def test_wolfram_3d_extrusion_offset_moves_and_clips_depth_band() -> None:
+    shifted = WolframEngine3D(12, 30, extrusionDepth=3, extrusionOffset=-2)
+    centered = WolframEngine3D(12, 30, extrusionDepth=4)
+    clipped = WolframEngine3D(12, 30, extrusionDepth=4, extrusionOffset=5)
+
+    assert shifted.extrusionOffset == -2
+    assert np.count_nonzero(shifted.grid[:, :2, :]) == 0
+    assert np.count_nonzero(shifted.grid[:, 5:, :]) == 0
+    assert np.count_nonzero(clipped.grid[:, :9, :]) == 0
+    assert np.count_nonzero(clipped.grid[:, 9:, :]) > 0
+    assert clipped.liveCount == centered.liveCount * 3 // 4

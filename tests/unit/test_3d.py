@@ -49,6 +49,20 @@ def test_3d_initializers_are_seeded_and_use_zyx_storage() -> None:
     assert explicit.sum() == 1
 
 
+def test_geometric_3d_seed_offsets_clip_or_wrap_at_volume_edges() -> None:
+    shifted = initializeGrid3D(9, "single", 1, 1, 0, offsetCells=(2, -1, 3))
+    clipped = initializeGrid3D(5, "cross", 1, 1, 0, boundary="fixed", offsetCells=(2, 2, 2))
+    wrapped = initializeGrid3D(5, "cross", 1, 1, 0, boundary="wrap", offsetCells=(2, 2, 2))
+
+    assert shifted[7, 3, 6] == 1
+    assert shifted.sum() == 1
+    assert clipped.sum() == 4
+    assert wrapped.sum() == 7
+    assert wrapped[4, 4, 0] == 1
+    assert wrapped[4, 0, 4] == 1
+    assert wrapped[0, 4, 4] == 1
+
+
 def test_3d_engine_counts_moore_and_von_neumann_neighbors() -> None:
     grid = np.zeros((5, 5, 5), dtype=np.uint8)
     grid[2, 2, 2] = 1
