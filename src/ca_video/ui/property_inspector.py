@@ -122,7 +122,7 @@ class PropertyInspector(QWidget):
 
         self._projectName.setText(project.name)
         self._projectSeed.setText(str(project.seed))
-        resolutionIndex = self._resolution.findData((project.output.width, project.output.height))
+        resolutionIndex = self._resolution.findData(f"{project.output.width}x{project.output.height}")
         self._resolution.setCurrentIndex(max(0, resolutionIndex))
         fpsIndex = self._fps.findData(project.output.fps)
         self._fps.setCurrentIndex(max(0, fpsIndex))
@@ -139,8 +139,11 @@ class PropertyInspector(QWidget):
         self._customNotation.setText(layer.rule.notation)
         neighborhoodIndex = self._neighborhood.findData(layer.rule.neighborhood)
         self._neighborhood.setCurrentIndex(max(0, neighborhoodIndex))
+        gridModeIndex = self._gridMode.findData("cell_size" if layer.cellSizePx is not None else "size")
+        self._gridMode.setCurrentIndex(max(0, gridModeIndex))
         self._gridWidth.setValue(layer.gridWidth)
         self._gridHeight.setValue(layer.gridHeight)
+        self._cellSize.setValue(layer.cellSizePx or 4)
         self._boundary.setCurrentIndex(max(0, self._boundary.findData(layer.boundary)))
 
         self._initialType.setCurrentIndex(max(0, self._initialType.findData(initial.type)))
@@ -162,6 +165,7 @@ class PropertyInspector(QWidget):
         self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
         self._stepInterval.setValue(layer.stepIntervalMs)
         self._syncRuleControls()
+        self._syncGridControls()
         self._syncInitialControls()
         self._syncSeedControls()
         self._updateResolvedSeed()
@@ -181,7 +185,7 @@ class PropertyInspector(QWidget):
 
         projectData["name"] = self._projectName.text().strip()
         projectData["seed"] = self._seedValue(self._projectSeed, "Project seed")
-        width, height = self._resolution.currentData()
+        width, height = RESOLUTIONS[self._resolution.currentIndex()]
         outputData["width"] = width
         outputData["height"] = height
         outputData["fps"] = self._fps.currentData()
@@ -199,10 +203,12 @@ class PropertyInspector(QWidget):
             if ruleKey == "custom"
             else {"preset": ruleKey}
         )
-        simulationData["grid"] = {
-            "size": [self._gridWidth.value(), self._gridHeight.value()],
-            "boundary": self._boundary.currentData(),
-        }
+        gridData = {"boundary": self._boundary.currentData()}
+        if self._gridMode.currentData() == "cell_size":
+            gridData["cell_size_px"] = self._cellSize.value()
+        else:
+            gridData["size"] = [self._gridWidth.value(), self._gridHeight.value()]
+        simulationData["grid"] = gridData
         simulationData["initial"] = self._initialData()
         layerData["render"]["color"] = self._liveColor.color
         layerData["render"]["layout"] = self._layout.currentData()
@@ -264,16 +270,25 @@ class PropertyInspector(QWidget):
         self._neighborhood = QComboBox()
         self._neighborhood.addItem("Moore (8 neighbors)", "moore")
         self._neighborhood.addItem("von Neumann (4 neighbors)", "von_neumann")
+        self._gridMode = QComboBox()
+        self._gridMode.addItem("Fixed grid size", "size")
+        self._gridMode.addItem("Cell size from export", "cell_size")
         self._gridWidth = self._spinBox(8, 2048)
         self._gridHeight = self._spinBox(8, 2048)
+        self._cellSize = self._spinBox(1, 128, " px")
+        self._derivedGrid = QLabel()
+        self._derivedGrid.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._boundary = QComboBox()
         self._boundary.addItem("Wrap", "wrap")
         self._boundary.addItem("Fixed", "fixed")
         simulationForm.addRow("Rule", self._rulePreset)
         simulationForm.addRow("Notation", self._customNotation)
         simulationForm.addRow("Neighborhood", self._neighborhood)
+        simulationForm.addRow("Grid mode", self._gridMode)
         simulationForm.addRow("Grid width", self._gridWidth)
         simulationForm.addRow("Grid height", self._gridHeight)
+        simulationForm.addRow("Cell size", self._cellSize)
+        simulationForm.addRow("Derived grid", self._derivedGrid)
         simulationForm.addRow("Boundary", self._boundary)
         layout.addWidget(simulation)
 
@@ -331,6 +346,7 @@ class PropertyInspector(QWidget):
         layout.addStretch(1)
 
         self._rulePreset.currentIndexChanged.connect(self._ruleChanged)
+        self._gridMode.currentIndexChanged.connect(self._gridModeChanged)
         self._initialType.currentIndexChanged.connect(self._initialChanged)
         self._layerSeedMode.currentIndexChanged.connect(self._seedModeChanged)
         self._connectLineEdit(self._layerName, True)
@@ -349,6 +365,7 @@ class PropertyInspector(QWidget):
             control.currentIndexChanged.connect(lambda _value: self._emitChange(True)) if isinstance(
                 control, QComboBox
             ) else control.valueChanged.connect(lambda _value: self._emitChange(True))
+        self._cellSize.valueChanged.connect(self._cellSizeChanged)
         self._cells.textChanged.connect(self._queueTextChange)
         self._rle.textChanged.connect(self._queueTextChange)
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
@@ -374,7 +391,7 @@ class PropertyInspector(QWidget):
         outputForm = QFormLayout(outputGroup)
         self._resolution = QComboBox()
         for width, height in RESOLUTIONS:
-            self._resolution.addItem(f"{width} × {height}", (width, height))
+            self._resolution.addItem(f"{width} × {height}", f"{width}x{height}")
         self._fps = QComboBox()
         for fps in FPS_VALUES:
             self._fps.addItem(f"{fps} fps", fps)
@@ -400,7 +417,7 @@ class PropertyInspector(QWidget):
 
         self._connectLineEdit(self._projectName, False)
         self._projectSeed.editingFinished.connect(self._projectSeedEdited)
-        self._resolution.currentIndexChanged.connect(lambda _value: self._emitChange(False))
+        self._resolution.currentIndexChanged.connect(self._resolutionChanged)
         self._fps.currentIndexChanged.connect(lambda _value: self._emitChange(False))
         self._duration.valueChanged.connect(lambda _value: self._emitChange(False))
         self._backgroundColor.colorChanged.connect(lambda _value: self._emitChange(False))
@@ -447,6 +464,44 @@ class PropertyInspector(QWidget):
         custom = self._rulePreset.currentData() == "custom"
         self._setFieldVisible(self._simulationForm, self._customNotation, custom)
         self._setFieldVisible(self._simulationForm, self._neighborhood, custom)
+
+    # :: VOID -> NONE
+    # Shows either explicit grid dimensions or export-relative cell sizing
+    def _syncGridControls(self) -> None:
+        derived = self._gridMode.currentData() == "cell_size"
+        self._setFieldVisible(self._simulationForm, self._gridWidth, not derived)
+        self._setFieldVisible(self._simulationForm, self._gridHeight, not derived)
+        self._setFieldVisible(self._simulationForm, self._cellSize, derived)
+        self._setFieldVisible(self._simulationForm, self._derivedGrid, derived)
+        if derived:
+            width, height = RESOLUTIONS[self._resolution.currentIndex()]
+            cellSize = self._cellSize.value()
+            gridWidth = (width + cellSize - 1) // cellSize
+            gridHeight = (height + cellSize - 1) // cellSize
+            self._derivedGrid.setText(f"{gridWidth} × {gridHeight} cells")
+
+    # :: VOID -> NONE
+    # Applies a grid-definition change and resets the selected simulation
+    def _gridModeChanged(self) -> None:
+        self._syncGridControls()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Recalculates the grid readout after an export-relative cell-size change
+    def _cellSizeChanged(self) -> None:
+        self._syncGridControls()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Applies an output-size change and resets simulations with derived grids
+    def _resolutionChanged(self) -> None:
+        self._syncGridControls()
+        usesDerivedGrid = self._gridMode.currentData() == "cell_size"
+        if self._project is not None:
+            usesDerivedGrid = usesDerivedGrid or any(
+                layer.cellSizePx is not None for layer in self._project.layers
+            )
+        self._emitChange(usesDerivedGrid)
 
     # :: VOID -> NONE
     # Shows a custom seed editor only when override mode is selected

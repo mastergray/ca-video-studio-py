@@ -10,6 +10,9 @@ export through FFmpeg. The broader product is defined in
 [`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
 in [`docs/native-ui-design.md`](docs/native-ui-design.md).
 
+The editor preview is capped at 640×360 and 30 fps. Export resolution and frame
+rate are applied only during offline video rendering.
+
 ## Development setup
 
 Requirements:

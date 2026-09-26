@@ -575,11 +575,20 @@ and server load actions have no native UI equivalent in version 1.
 ### 13.2 Preview behavior
 
 - Preview uses the same simulation and render implementation as export.
-- Preview may rasterize at a lower resolution, but uses the export project's logical grid and timing.
+- Preview rasterization is independent of export settings. Version 1 renders
+  preview frames at no more than 640×360 and samples them at 30 preview ticks
+  per second; smaller exports are not enlarged for preview.
+- Preview and export use the same logical grids and simulation step intervals.
+  Preview ticks sample exact rational presentation times, so a layer reaches
+  the same generation at the same timestamp regardless of export fps.
+- Export resolution and fps are used only by offline rendering. Changing them
+  must not cause the editor to allocate full-resolution preview frames or run
+  the preview timer at the export frame rate.
 - NumPy RGB/RGBA frames are bridged to Qt using `QImage` with explicit ownership and row-stride handling; the UI must not retain a view onto a reused or freed array.
 - Reset reproduces frame zero exactly.
 - Jump-to-time resets and simulates forward deterministically. Version 1 need not cache arbitrary snapshots.
-- The HUD shows presentation time, output frame, per-layer generation, live cell count, density, grid size, and selected rule.
+- The HUD shows presentation time, per-layer generation, live cell count,
+  density, grid size, selected rule, preview raster/fps, and export raster/fps.
 - Editing a simulation-affecting property resets the affected layer after confirmation when the preview has advanced.
 - Editing only a render property updates without resetting simulation where safe.
 

@@ -36,6 +36,9 @@ from ca_video.ui.property_inspector import PropertyInspector  # Edit supported p
 from ca_video.ui.render_worker import RenderWorker  # Export video outside the GUI thread
 
 PROJECT_FILTER = "CA Video Projects (*.cav.json);;JSON (*.json)"
+PREVIEW_WIDTH = 640
+PREVIEW_HEIGHT = 360
+PREVIEW_FPS = 30
 
 
 # Hosts the native editor, preview controls, persistence, and render workflow
@@ -47,8 +50,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._project = project
         self._projectPath = projectPath.resolve() if projectPath else None
-        self._runtime = ProjectRuntime(project)
+        self._runtime = ProjectRuntime(project, self._previewSize(project))
         self._frameIndex = 0
+        self._previewTick = 0
         self._dirty = False
         self._previewOnly = False
         self._loadingUi = False
@@ -69,7 +73,7 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self._advancePreview)
         self._configureTimer()
         self._loadUiFromProject()
-        self._showFrame(self._runtime.renderFrame(0))
+        self._showFrame(self._runtime.renderAtTick(0, PREVIEW_FPS))
         self._updateTitle()
 
     #
@@ -243,6 +247,10 @@ class MainWindow(QMainWindow):
         self._infoLabel.setObjectName("hud")
         self._infoLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self._infoLabel)
+        self._formatLabel = QLabel()
+        self._formatLabel.setObjectName("hud")
+        self._formatLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self._formatLabel)
 
         self._progress = QProgressBar()
         self._progress.setVisible(False)
@@ -369,10 +377,22 @@ class MainWindow(QMainWindow):
         self._updateLayerActions()
         self._loadingUi = False
 
+    # :: projectConfig -> (INT, INT)
+    # Caps preview raster size without enlarging smaller exports
+    def _previewSize(self, project: ProjectConfig) -> tuple[int, int]:
+        return min(project.output.width, PREVIEW_WIDTH), min(project.output.height, PREVIEW_HEIGHT)
+
+    # :: projectConfig? -> INT
+    # Calculates preview samples needed to cover the project duration
+    def _previewFrameCount(self, project: ProjectConfig | None = None) -> int:
+        selected = project or self._project
+        numerator = selected.output.totalFrames * PREVIEW_FPS
+        return max(1, (numerator + selected.output.fps - 1) // selected.output.fps)
+
     # :: VOID -> NONE
-    # Synchronizes preview timing with project fps
+    # Uses a fixed preview clock independent of export fps
     def _configureTimer(self) -> None:
-        self._timer.setInterval(max(1, round(1000 / self._project.output.fps)))
+        self._timer.setInterval(round(1000 / PREVIEW_FPS))
 
     # :: ndarray -> NONE
     # Displays a frame and refreshes preview statistics
@@ -382,11 +402,15 @@ class MainWindow(QMainWindow):
         engine = self._runtime.engineForLayer(self._selectedLayerIndex)
         density = engine.liveCount / engine.grid.size * 100
         duration = self._project.output.durationSeconds
-        currentSeconds = self._frameIndex / self._project.output.fps
+        currentSeconds = self._previewTick / PREVIEW_FPS
         self._timeLabel.setText(f"{currentSeconds:06.2f} / {duration:06.2f} s")
         self._infoLabel.setText(
             f"Gen {engine.generation}  ·  {engine.liveCount:,} live  ·  {density:.1f}%  ·  "
             f"{layer.name}  ·  {layer.gridWidth}×{layer.gridHeight}  ·  {layer.rule.notation}"
+        )
+        self._formatLabel.setText(
+            f"Preview {self._runtime.renderSize[0]}×{self._runtime.renderSize[1]} @ {PREVIEW_FPS}  ·  "
+            f"Export {self._project.output.width}×{self._project.output.height} @ {self._project.output.fps}"
         )
 
     # :: VOID -> NONE
@@ -395,7 +419,7 @@ class MainWindow(QMainWindow):
         if self._timer.isActive():
             self._pausePreview()
         else:
-            if self._frameIndex >= self._project.output.totalFrames - 1:
+            if self._previewTick >= self._previewFrameCount() - 1:
                 self._resetPreview()
             self._timer.start()
             self._playButton.setText("❚❚ Pause")
@@ -407,13 +431,14 @@ class MainWindow(QMainWindow):
         self._playButton.setText("▶ Play")
 
     # :: VOID -> NONE
-    # Advances preview playback by one output frame
+    # Advances preview playback by one fixed-rate preview tick
     def _advancePreview(self) -> None:
-        if self._frameIndex >= self._project.output.totalFrames - 1:
+        if self._previewTick >= self._previewFrameCount() - 1:
             self._pausePreview()
             return
-        self._frameIndex += 1
-        self._showFrame(self._runtime.renderFrame(self._frameIndex))
+        self._previewTick += 1
+        self._frameIndex = (self._previewTick * self._project.output.fps) // PREVIEW_FPS
+        self._showFrame(self._runtime.renderAtTick(self._previewTick, PREVIEW_FPS))
 
     # :: VOID -> NONE
     # Advances the preview by exactly one automaton generation
@@ -421,6 +446,9 @@ class MainWindow(QMainWindow):
         self._pausePreview()
         frame = self._runtime.stepOnce()
         self._frameIndex = self._runtime.currentFrameIndex
+        self._previewTick = (
+            self._frameIndex * PREVIEW_FPS + self._project.output.fps - 1
+        ) // self._project.output.fps
         self._showFrame(frame)
 
     # :: VOID -> NONE
@@ -429,7 +457,8 @@ class MainWindow(QMainWindow):
         self._pausePreview()
         self._runtime.reset()
         self._frameIndex = 0
-        self._showFrame(self._runtime.renderFrame(0))
+        self._previewTick = 0
+        self._showFrame(self._runtime.renderAtTick(0, PREVIEW_FPS))
 
     # :: object, BOOL -> NONE
     # Validates inspector edits and updates the shared runtime
@@ -444,11 +473,14 @@ class MainWindow(QMainWindow):
         self._pausePreview()
         try:
             if resetSimulation:
-                runtime = ProjectRuntime(project)
-                frame = runtime.renderFrame(0)
+                runtime = ProjectRuntime(project, self._previewSize(project))
+                self._previewTick = 0
+                frame = runtime.renderAtTick(0, PREVIEW_FPS)
             else:
                 runtime = self._runtime
-                frame = runtime.updateProject(project, False)
+                runtime.updateProject(project, False, self._previewSize(project))
+                self._previewTick = min(self._previewTick, self._previewFrameCount(project) - 1)
+                frame = runtime.renderAtTick(self._previewTick, PREVIEW_FPS)
         except ValueError as error:
             self._showValidationError(str(error))
             return
@@ -491,7 +523,7 @@ class MainWindow(QMainWindow):
         self._selectedLayerIndex = layerIndex
         self._inspector.setProject(self._project, layerIndex)
         self._updateLayerActions()
-        self._showFrame(self._runtime.renderFrame(self._frameIndex))
+        self._showFrame(self._runtime.renderAtTick(self._previewTick, PREVIEW_FPS))
 
     # :: VOID -> NONE
     # Refreshes all layer rows after inspector edits
@@ -623,7 +655,7 @@ class MainWindow(QMainWindow):
         except ConfigError as error:
             QMessageBox.critical(self, "Save Failed", str(error))
             return False
-        self._runtime.updateProject(self._project, False)
+        self._runtime.updateProject(self._project, False, self._previewSize(self._project))
         self._inspector.setProject(self._project, self._selectedLayerIndex)
         self._setDirty(False)
         self.statusBar().showMessage(f"Saved {self._projectPath}", 5000)
@@ -669,11 +701,12 @@ class MainWindow(QMainWindow):
         self._project = project
         self._projectPath = path.resolve() if path else None
         self._selectedLayerIndex = 0
-        self._runtime = ProjectRuntime(project)
+        self._runtime = ProjectRuntime(project, self._previewSize(project))
         self._frameIndex = 0
+        self._previewTick = 0
         self._configureTimer()
         self._loadUiFromProject()
-        self._showFrame(self._runtime.renderFrame(0))
+        self._showFrame(self._runtime.renderAtTick(0, PREVIEW_FPS))
         self._diagnostics.setText("✓ Project is valid")
         self._diagnostics.setStyleSheet("color: #7abf6e;")
         self._setDirty(dirty)

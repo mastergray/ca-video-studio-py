@@ -109,3 +109,46 @@ def test_layer_seed_can_switch_from_derived_to_custom() -> None:
     assert inspector._resolvedSeed.text() == "424242"
     window._setDirty(False)
     window.close()
+
+
+def test_preview_resolution_and_clock_are_independent_of_export() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    inspector = window.inspector
+
+    inspector._resolution.setCurrentIndex(inspector._resolution.findData("1920x1080"))
+    inspector._fps.setCurrentIndex(inspector._fps.findData(60))
+    app.processEvents()
+
+    assert window.project.output.width == 1920
+    assert window.project.output.fps == 60
+    assert window.runtime.renderSize == (640, 360)
+    assert window._timer.interval() == 33
+
+    for _ in range(3):
+        window._advancePreview()
+    assert window.frameIndex == 6
+    assert window.runtime.engine.generation == 1
+    assert "Preview 640×360 @ 30" in window._formatLabel.text()
+    assert "Export 1920×1080 @ 60" in window._formatLabel.text()
+    window._setDirty(False)
+    window.close()
+
+
+def test_cell_size_grid_tracks_export_resolution() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    inspector = window.inspector
+
+    inspector._gridMode.setCurrentIndex(inspector._gridMode.findData("cell_size"))
+    inspector._cellSize.setValue(8)
+    inspector._resolution.setCurrentIndex(inspector._resolution.findData("1920x1080"))
+    app.processEvents()
+
+    assert window.project.layer.cellSizePx == 8
+    assert window.project.layer.gridWidth == 240
+    assert window.project.layer.gridHeight == 135
+    assert inspector._derivedGrid.text() == "240 × 135 cells"
+    assert window.runtime.renderSize == (640, 360)
+    window._setDirty(False)
+    window.close()

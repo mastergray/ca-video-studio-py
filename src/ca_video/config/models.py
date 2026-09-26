@@ -277,7 +277,7 @@ class Initial2DConfig:
 # Stores validated settings for the milestone's single 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT? -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT? -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -297,6 +297,7 @@ class Layer2DConfig:
         rulePreset: str | None = "life",
         initial: Initial2DConfig | None = None,
         seed: int | None = None,
+        cellSizePx: int | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -314,6 +315,7 @@ class Layer2DConfig:
         self._rulePreset = rulePreset
         self._initial = initial or Initial2DConfig("random", initialDensity)
         self._seed = seed
+        self._cellSizePx = cellSizePx
 
     #
     # Properties
@@ -414,6 +416,12 @@ class Layer2DConfig:
     @property
     def seed(self) -> int | None:
         return self._seed
+
+    # PROPERTY :: VOID -> INT?
+    # Returns the export-relative cell size when the grid is derived
+    @property
+    def cellSizePx(self) -> int | None:
+        return self._cellSizePx
 
 
 # Stores a fully validated project configuration
@@ -575,7 +583,11 @@ def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
         "simulation": {
             "mode": "outer_totalistic",
             "grid": {
-                "size": [layer.gridWidth, layer.gridHeight],
+                **(
+                    {"cell_size_px": layer.cellSizePx}
+                    if layer.cellSizePx is not None
+                    else {"size": [layer.gridWidth, layer.gridHeight]}
+                ),
                 "boundary": layer.boundary,
             },
             "rule": ruleData,
@@ -714,6 +726,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         raise ConfigError("layers[0].simulation.grid.boundary must be wrap or fixed")
     if "size" in grid and "cell_size_px" in grid:
         raise ConfigError("grid must use either size or cell_size_px, not both")
+    cellSize: int | None = None
     if "size" in grid:
         sizeValue = grid["size"]
         if not isinstance(sizeValue, list) or len(sizeValue) != 2:
@@ -828,6 +841,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         rulePreset,
         initial,
         layerSeed,
+        cellSize,
     )
     parsedLayers = [layer]
     for layerIndex, extraLayerData in enumerate(layers[1:], 1):

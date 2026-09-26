@@ -81,3 +81,30 @@ def test_derived_layer_seed_changes_with_project_seed() -> None:
     second = ProjectRuntime(parseProject(secondData))
 
     assert not np.array_equal(first.engine.grid, second.engine.grid)
+
+
+def test_preview_runtime_uses_capped_raster_size() -> None:
+    data = defaultProject().toDict()
+    data["output"].update({"width": 1920, "height": 1080})
+    project = parseProject(data)
+
+    preview = ProjectRuntime(project, (640, 360)).renderAtTick(0, 30)
+    export = ProjectRuntime(project).renderFrame(0)
+
+    assert preview.shape == (360, 640, 3)
+    assert export.shape == (1080, 1920, 3)
+
+
+def test_preview_and_export_match_generation_at_same_time() -> None:
+    data = defaultProject().toDict()
+    data["output"]["fps"] = 60
+    project = parseProject(data)
+    previewRuntime = ProjectRuntime(project, (640, 360))
+    exportRuntime = ProjectRuntime(project, (640, 360))
+
+    previewFrame = previewRuntime.renderAtTick(3, 30)
+    exportFrame = exportRuntime.renderFrame(6)
+
+    assert previewRuntime.engine.generation == 1
+    assert exportRuntime.engine.generation == 1
+    np.testing.assert_array_equal(previewFrame, exportFrame)

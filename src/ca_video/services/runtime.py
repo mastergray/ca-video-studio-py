@@ -21,11 +21,15 @@ def stableLayerSeed(masterSeed: int, layerId: str) -> int:
 # Coordinates independent simulations and ordered alpha composition
 class ProjectRuntime:
 
-    # CONSTRUCTOR :: projectConfig -> projectRuntime
+    # CONSTRUCTOR :: projectConfig, (INT, INT)? -> projectRuntime
     # Creates a deterministic runtime for every configured layer
-    def __init__(self, project: ProjectConfig) -> None:
+    def __init__(self, project: ProjectConfig, renderSize: tuple[int, int] | None = None) -> None:
         self._project = project
+        self._usesProjectSize = renderSize is None
+        self._renderWidth, self._renderHeight = renderSize or (project.output.width, project.output.height)
         self._currentFrameIndex = 0
+        self._currentTimeTicks = 0
+        self._currentTimebase = 1
         self._engines: dict[str, OuterTotalisticEngine] = {}
         self._renderers: dict[str, Renderer2D] = {}
         self.reset()
@@ -52,6 +56,12 @@ class ProjectRuntime:
     def currentFrameIndex(self) -> int:
         return self._currentFrameIndex
 
+    # PROPERTY :: VOID -> (INT, INT)
+    # Returns the raster size produced by this runtime
+    @property
+    def renderSize(self) -> tuple[int, int]:
+        return self._renderWidth, self._renderHeight
+
     #
     # Instance Methods
     #
@@ -71,13 +81,25 @@ class ProjectRuntime:
         }
         self._buildRenderers()
         self._currentFrameIndex = 0
+        self._currentTimeTicks = 0
+        self._currentTimebase = 1
 
-    # :: projectConfig, BOOL -> rgbFrame
+    # :: projectConfig, BOOL, (INT, INT)? -> rgbFrame
     # Reconfigures appearance while optionally rebuilding simulations
-    def updateProject(self, project: ProjectConfig, resetSimulation: bool) -> NDArray[np.uint8]:
+    def updateProject(
+        self,
+        project: ProjectConfig,
+        resetSimulation: bool,
+        renderSize: tuple[int, int] | None = None,
+    ) -> NDArray[np.uint8]:
         previousIds = tuple(layer.id for layer in self._project.layers)
         nextIds = tuple(layer.id for layer in project.layers)
         self._project = project
+        if renderSize is not None:
+            self._usesProjectSize = False
+            self._renderWidth, self._renderHeight = renderSize
+        elif self._usesProjectSize:
+            self._renderWidth, self._renderHeight = project.output.width, project.output.height
         if resetSimulation or previousIds != nextIds:
             self.reset()
         else:
@@ -87,16 +109,27 @@ class ProjectRuntime:
     # :: INT -> rgbFrame
     # Advances deterministically to and renders a requested output frame
     def renderFrame(self, frameIndex: int) -> NDArray[np.uint8]:
-        if frameIndex < self._currentFrameIndex:
+        return self.renderAtTick(frameIndex, self._project.output.fps)
+
+    # :: INT, INT -> rgbFrame
+    # Renders a rational presentation time for preview or export sampling
+    def renderAtTick(self, tickIndex: int, ticksPerSecond: int) -> NDArray[np.uint8]:
+        if tickIndex < 0:
+            raise ValueError("tick index must not be negative")
+        if ticksPerSecond < 1:
+            raise ValueError("timebase must be positive")
+        if tickIndex * self._currentTimebase < self._currentTimeTicks * ticksPerSecond:
             self.reset()
         for layer in self._project.layers:
             if not layer.enabled:
                 continue
             engine = self._engines[layer.id]
-            targetGeneration = self._generationDue(layer, frameIndex)
+            targetGeneration = self._generationDue(layer, tickIndex, ticksPerSecond)
             while engine.generation < targetGeneration:
                 engine.step()
-        self._currentFrameIndex = frameIndex
+        self._currentTimeTicks = tickIndex
+        self._currentTimebase = ticksPerSecond
+        self._currentFrameIndex = (tickIndex * self._project.output.fps) // ticksPerSecond
         return self._composite()
 
     # :: VOID -> rgbFrame
@@ -111,6 +144,8 @@ class ProjectRuntime:
             numerator = engine.generation * layer.stepIntervalMs * self._project.output.fps
             frameCandidates.append((numerator + 999) // 1000)
         self._currentFrameIndex = max(frameCandidates)
+        self._currentTimeTicks = self._currentFrameIndex
+        self._currentTimebase = self._project.output.fps
         return self._composite()
 
     #
@@ -146,11 +181,10 @@ class ProjectRuntime:
     # :: VOID -> NONE
     # Rebuilds renderers for the current output and layer appearances
     def _buildRenderers(self) -> None:
-        output = self._project.output
         self._renderers = {
             layer.id: Renderer2D(
-                output.width,
-                output.height,
+                self._renderWidth,
+                self._renderHeight,
                 self._project.canvasBackground,
                 layer.liveColor,
                 layer.opacity,
@@ -163,8 +197,7 @@ class ProjectRuntime:
     # :: VOID -> rgbFrame
     # Composites enabled layers by z-index and stable editor order
     def _composite(self) -> NDArray[np.uint8]:
-        output = self._project.output
-        frame = np.empty((output.height, output.width, 3), dtype=np.float32)
+        frame = np.empty((self._renderHeight, self._renderWidth, 3), dtype=np.float32)
         frame[:] = self._project.canvasBackground
         indexedLayers = enumerate(self._project.layers)
         for _, layer in sorted(indexedLayers, key=lambda item: (item[1].zIndex, item[0])):
@@ -175,7 +208,7 @@ class ProjectRuntime:
             frame = frame * (1.0 - alpha) + rendered[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: layer2DConfig, INT -> INT
-    # Calculates the generation due at an output frame using integer time
-    def _generationDue(self, layer: Layer2DConfig, frameIndex: int) -> int:
-        return (frameIndex * 1000) // (layer.stepIntervalMs * self._project.output.fps)
+    # :: layer2DConfig, INT, INT -> INT
+    # Calculates the generation due at a rational presentation time
+    def _generationDue(self, layer: Layer2DConfig, tickIndex: int, ticksPerSecond: int) -> int:
+        return (tickIndex * 1000) // (layer.stepIntervalMs * ticksPerSecond)

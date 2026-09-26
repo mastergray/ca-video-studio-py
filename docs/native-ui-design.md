@@ -193,12 +193,20 @@ The preview surface:
 
 - Maintains the project output's 16:9 aspect ratio.
 - Letterboxes rather than stretching.
+- Renders internally at no more than 640×360 and 30 fps, independently of
+  export resolution and fps.
+- Shows the preview and export raster/fps separately in the HUD.
 - Offers Fit, 50%, 100%, and 200% zoom choices.
 - Uses nearest-neighbor display scaling by default for crisp cells.
 - May offer smooth display scaling as a preview preference; this does not alter
   exported frames.
 - Displays a neutral empty state when no valid project is loaded.
 - Uses the same deterministic runtime and frame renderer as export.
+
+The preview clock samples rational presentation time. For example, a 30 fps
+preview of a 60 fps export skips every other export sample visually but reaches
+the same automaton generation at the same timestamp. A `cell_size_px` grid is
+always derived from export resolution, never preview resolution.
 
 Editing directly on the grid is outside the first editor milestone. A later
 cell-painting tool may be added without changing this layout.

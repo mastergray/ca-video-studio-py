@@ -97,3 +97,21 @@ def test_optional_layer_seed_round_trips_and_is_bounded() -> None:
     data["layers"][0]["seed"] += 1
     with pytest.raises(ConfigError, match="between 0"):
         parseProject(data)
+
+
+def test_cell_size_grid_round_trips_and_tracks_export_resolution() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["simulation"]["grid"] = {
+        "cell_size_px": 8,
+        "boundary": "wrap",
+    }
+    project = parseProject(data)
+
+    assert project.layer.cellSizePx == 8
+    assert (project.layer.gridWidth, project.layer.gridHeight) == (80, 45)
+    assert project.toDict()["layers"][0]["simulation"]["grid"]["cell_size_px"] == 8
+
+    resized = project.toDict()
+    resized["output"].update({"width": 1920, "height": 1080})
+    resizedProject = parseProject(resized)
+    assert (resizedProject.layer.gridWidth, resizedProject.layer.gridHeight) == (240, 135)
