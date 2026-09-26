@@ -18,15 +18,15 @@ class OuterTotalisticRule:
     # Returns normalized B/S/C notation
     @property
     def notation(self) -> str:
-        birth = "".join(str(value) for value in self.birth)
-        survival = "".join(str(value) for value in self.survival)
+        birth = _formatCounts(self.birth)
+        survival = _formatCounts(self.survival)
         states = "" if self.states == 2 else f"/C{self.states}"
         return f"B{birth}/S{survival}{states}"
 
 
-# :: STRING, STRING -> outerTotalisticRule
-# Parses and validates a two-dimensional B/S/C rule
-def parseRule(notation: str, neighborhood: str = "moore") -> OuterTotalisticRule:
+# :: STRING, STRING, INT -> outerTotalisticRule
+# Parses and validates a two- or three-dimensional B/S/C rule
+def parseRule(notation: str, neighborhood: str = "moore", dimension: int = 2) -> OuterTotalisticRule:
     if neighborhood not in {"moore", "von_neumann"}:
         raise ValueError("neighborhood must be moore or von_neumann")
     if not isinstance(notation, str):
@@ -34,13 +34,22 @@ def parseRule(notation: str, neighborhood: str = "moore") -> OuterTotalisticRule
     match = RULE_NOTATION.fullmatch(notation.strip())
     if not match:
         raise ValueError("rule must use B…/S… with optional /C… states")
-    maximum = 8 if neighborhood == "moore" else 4
+    if dimension not in {2, 3}:
+        raise ValueError("rule dimension must be 2 or 3")
+    maximum = (26 if neighborhood == "moore" else 6) if dimension == 3 else (8 if neighborhood == "moore" else 4)
     birth = _parseCounts(match.group(1), maximum, "birth")
     survival = _parseCounts(match.group(2), maximum, "survival")
     states = int(match.group(3) or 2)
     if not 2 <= states <= 256:
         raise ValueError("rule states must be between 2 and 256")
     return OuterTotalisticRule(birth, survival, states, neighborhood)
+
+
+# :: (INT) -> STRING
+# Formats multi-digit neighbor counts without ambiguity
+def _formatCounts(counts: tuple[int, ...]) -> str:
+    separator = "," if any(count >= 10 for count in counts) else ""
+    return separator.join(str(count) for count in counts)
 
 
 # :: STRING, INT, STRING -> (INT)

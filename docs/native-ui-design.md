@@ -389,13 +389,16 @@ The first milestone targeted the implemented 2D engine before the full version
     path.
 
 Multi-layer composition, per-layer seed overrides, export-relative cell sizing,
-and `wolfram_2d` have since been completed. The Wolfram inspector replaces
+`wolfram_2d`, and the first 3D milestone have since been completed. The Wolfram inspector replaces
 outer-totalistic rule controls with a rule-number field from 0 through 255 and
 offers center-cell, seeded-random, and explicit-bit starting rows. The Add Layer
-menu creates either an outer-totalistic 2D layer or a Wolfram 2D history layer.
+menu creates an outer-totalistic 2D layer, a Wolfram 2D history layer, or an
+outer-totalistic 3D layer. Selecting a 3D layer exposes its categorized rule,
+cubic grid size, boundary, voxel initializer, face palette, automatic/fixed
+voxel scale, surface-only extraction, opacity, seed, and timing controls.
 
-3D, advanced gradients/trails, direct cell painting, and arbitrary timeline
-scrubbing remain visible in the overall design but are not yet implemented.
+Projected/camera-controlled 3D, advanced gradients/trails, direct cell
+painting, and arbitrary timeline scrubbing remain visible in the overall design but are not yet implemented.
 Unimplemented controls must not be displayed as if they work.
 
 ### 9.1 Milestone acceptance

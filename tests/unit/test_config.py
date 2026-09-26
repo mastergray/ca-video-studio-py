@@ -186,3 +186,58 @@ def test_geometric_pixel_offset_round_trips_and_is_type_specific(tmp_path) -> No
     initial.update({"type": "random"})
     with pytest.raises(ConfigError, match="supported only"):
         parseProject(data, tmp_path)
+
+
+def test_3d_layer_round_trips_with_normalized_catalog_initializer(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    data["layers"][0] = {
+        "id": "voxels",
+        "name": "Voxels",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 24, "boundary": "fixed"},
+            "rule": {"preset": "445"},
+            "initial": {"type": "catalog_default"},
+        },
+        "render": {
+            "style": "isometric_voxel",
+            "palette": "445",
+            "voxel_scale": "auto",
+            "surface_only": True,
+        },
+    }
+
+    project = parseProject(data, tmp_path)
+    loaded = saveProject(project, tmp_path / "voxels.cav.json")
+
+    assert loaded.layer.dimension == "3d"
+    assert loaded.layer.gridSize == 24
+    assert loaded.layer.initial.type == "sphere"
+    assert loaded.layer.initial.density == 0.5
+    assert loaded.layer.voxelScale == 0
+    assert loaded.toDict()["layers"][0]["render"]["voxel_scale"] == "auto"
+
+
+def test_mixed_2d_and_3d_layers_parse_together() -> None:
+    data = defaultProject().toDict()
+    data["layers"].append(
+        {
+            "id": "crystal",
+            "name": "Crystal",
+            "dimension": "3d",
+            "z_index": 1,
+            "simulation": {
+                "mode": "outer_totalistic",
+                "grid": {"grid_size": 16, "boundary": "fixed"},
+                "rule": {"preset": "crystal"},
+                "initial": {"type": "cross"},
+            },
+            "render": {"style": "isometric_voxel", "palette": "crystal"},
+        }
+    )
+
+    project = parseProject(data)
+
+    assert [layer.dimension for layer in project.layers] == ["2d", "3d"]
+    assert parseProject(project.toDict()).layers[1].rulePreset == "crystal"

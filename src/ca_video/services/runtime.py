@@ -5,13 +5,23 @@ import hashlib  # Derive stable per-layer random seeds
 import numpy as np  # Create frame buffers and disabled-layer grids
 from numpy.typing import NDArray  # Describe NumPy array types
 
-from ca_video.config.models import Layer2DConfig, ProjectConfig  # Read validated project settings
+from ca_video.catalogs.rules_3d import getPalette3D  # Resolve isometric face colors
+from ca_video.config.models import (  # Read validated project and layer settings
+    Layer2DConfig,
+    Layer3DConfig,
+    LayerConfig,
+    ProjectConfig,
+)
 from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
+from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
 from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
+from ca_video.simulation.initialization_3d import initializeGrid3D  # Build starting voxel grids
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
+from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D automata
 from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
 
-SimulationEngine = OuterTotalisticEngine | WolframEngine
+SimulationEngine = OuterTotalisticEngine | OuterTotalisticEngine3D | WolframEngine
+LayerRenderer = Renderer2D | Renderer3D
 
 
 # :: INT, STRING -> INT
@@ -34,7 +44,7 @@ class ProjectRuntime:
         self._currentTimeTicks = 0
         self._currentTimebase = 1
         self._engines: dict[str, SimulationEngine] = {}
-        self._renderers: dict[str, Renderer2D] = {}
+        self._renderers: dict[str, LayerRenderer] = {}
         self.reset()
 
     #
@@ -155,9 +165,26 @@ class ProjectRuntime:
     # Protected Methods
     #
 
-    # :: layer2DConfig -> simulationEngine
+    # :: layerConfig -> simulationEngine
     # Creates one deterministically initialized layer engine
-    def _createEngine(self, layer: Layer2DConfig) -> SimulationEngine:
+    def _createEngine(self, layer: LayerConfig) -> SimulationEngine:
+        if isinstance(layer, Layer3DConfig):
+            if not layer.enabled:
+                grid3D = np.zeros((layer.gridSize, layer.gridSize, layer.gridSize), dtype=np.uint8)
+                return OuterTotalisticEngine3D(grid3D, layer.rule, layer.boundary)
+            initial3D = layer.initial
+            resolvedSeed3D = layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id)
+            grid3D = initializeGrid3D(
+                layer.gridSize,
+                initial3D.type,
+                initial3D.density,
+                initial3D.radius,
+                resolvedSeed3D,
+                initial3D.cells,
+                initial3D.origin,
+                layer.boundary,
+            )
+            return OuterTotalisticEngine3D(grid3D, layer.rule, layer.boundary)
         if not layer.enabled:
             if layer.simulationMode == "wolfram_2d":
                 return WolframEngine.blank(layer.gridWidth, layer.gridHeight, layer.wolframRule or 0)
@@ -225,18 +252,29 @@ class ProjectRuntime:
     # :: VOID -> NONE
     # Rebuilds renderers for the current output and layer appearances
     def _buildRenderers(self) -> None:
-        self._renderers = {
-            layer.id: Renderer2D(
-                self._renderWidth,
-                self._renderHeight,
-                self._project.canvasBackground,
-                layer.liveColor,
-                layer.opacity,
-                layer.layout,
-                layer.rule.states if layer.rule is not None else 2,
-            )
-            for layer in self._project.layers
-        }
+        renderers: dict[str, LayerRenderer] = {}
+        for layer in self._project.layers:
+            if isinstance(layer, Layer3DConfig):
+                renderers[layer.id] = Renderer3D(
+                    self._renderWidth,
+                    self._renderHeight,
+                    getPalette3D(layer.palette),
+                    layer.opacity,
+                    layer.voxelScale,
+                    layer.surfaceOnly,
+                    layer.boundary,
+                )
+            else:
+                renderers[layer.id] = Renderer2D(
+                    self._renderWidth,
+                    self._renderHeight,
+                    self._project.canvasBackground,
+                    layer.liveColor,
+                    layer.opacity,
+                    layer.layout,
+                    layer.rule.states if layer.rule is not None else 2,
+                )
+        self._renderers = renderers
 
     # :: VOID -> rgbFrame
     # Composites enabled layers by z-index and stable editor order
@@ -252,7 +290,7 @@ class ProjectRuntime:
             frame = frame * (1.0 - alpha) + rendered[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: layer2DConfig, INT, INT -> INT
+    # :: layerConfig, INT, INT -> INT
     # Calculates the generation due at a rational presentation time
-    def _generationDue(self, layer: Layer2DConfig, tickIndex: int, ticksPerSecond: int) -> int:
+    def _generationDue(self, layer: LayerConfig, tickIndex: int, ticksPerSecond: int) -> int:
         return (tickIndex * 1000) // (layer.stepIntervalMs * ticksPerSecond)

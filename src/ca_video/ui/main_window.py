@@ -25,7 +25,8 @@ from PySide6.QtWidgets import (  # Build the native three-pane editor
 
 from ca_video.config.models import (  # Load, validate, and persist projects
     ConfigError,
-    Layer2DConfig,
+    Layer3DConfig,
+    LayerConfig,
     ProjectConfig,
     defaultProject,
     loadProject,
@@ -208,6 +209,8 @@ class MainWindow(QMainWindow):
         add2DAction.triggered.connect(self._addLayer)
         addWolframAction = addMenu.addAction("Wolfram 2D History")
         addWolframAction.triggered.connect(self._addWolframLayer)
+        add3DAction = addMenu.addAction("3D Automaton")
+        add3DAction.triggered.connect(self._add3DLayer)
         self._addLayerButton.setMenu(addMenu)
         layout.addWidget(self._addLayerButton)
         self._duplicateLayerButton = QPushButton("Duplicate")
@@ -410,15 +413,20 @@ class MainWindow(QMainWindow):
         density = engine.liveCount / engine.grid.size * 100
         duration = self._project.output.durationSeconds
         currentSeconds = self._previewTick / PREVIEW_FPS
-        ruleLabel = (
-            f"W{layer.wolframRule}"
-            if layer.simulationMode == "wolfram_2d"
-            else layer.rule.notation if layer.rule is not None else "Unknown"
-        )
+        if isinstance(layer, Layer3DConfig):
+            ruleLabel = layer.rule.notation
+            gridLabel = f"{layer.gridSize}³"
+        else:
+            ruleLabel = (
+                f"W{layer.wolframRule}"
+                if layer.simulationMode == "wolfram_2d"
+                else layer.rule.notation if layer.rule is not None else "Unknown"
+            )
+            gridLabel = f"{layer.gridWidth}×{layer.gridHeight}"
         self._timeLabel.setText(f"{currentSeconds:06.2f} / {duration:06.2f} s")
         self._infoLabel.setText(
             f"Gen {engine.generation}  ·  {engine.liveCount:,} live  ·  {density:.1f}%  ·  "
-            f"{layer.name}  ·  {layer.gridWidth}×{layer.gridHeight}  ·  {ruleLabel}"
+            f"{layer.name}  ·  {gridLabel}  ·  {ruleLabel}"
         )
         self._formatLabel.setText(
             f"Preview {self._runtime.renderSize[0]}×{self._runtime.renderSize[1]} @ {PREVIEW_FPS}  ·  "
@@ -586,6 +594,38 @@ class MainWindow(QMainWindow):
         self._loadUiFromProject()
 
     # :: VOID -> NONE
+    # Adds a default isometric outer-totalistic voxel automaton
+    def _add3DLayer(self) -> None:
+        data = self._project.toDict()
+        layerNumber = len(data["layers"]) + 1
+        layerData = {
+            "id": self._uniqueLayerId(f"voxel_{layerNumber}"),
+            "name": "3D 445",
+            "enabled": True,
+            "dimension": "3d",
+            "z_index": 0,
+            "opacity": 1.0,
+            "step_interval_ms": 100,
+            "simulation": {
+                "mode": "outer_totalistic",
+                "grid": {"grid_size": 24, "boundary": "fixed"},
+                "rule": {"preset": "445"},
+                "initial": {"type": "catalog_default"},
+            },
+            "render": {
+                "style": "isometric_voxel",
+                "palette": "445",
+                "voxel_scale": "auto",
+                "surface_only": True,
+            },
+        }
+        data["layers"].insert(0, layerData)
+        self._normalizeLayerOrder(data)
+        self._selectedLayerIndex = 0
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: VOID -> NONE
     # Duplicates the selected layer with a fresh stable identifier
     def _duplicateLayer(self) -> None:
         data = self._project.toDict()
@@ -636,9 +676,11 @@ class MainWindow(QMainWindow):
             suffix += 1
         return candidate
 
-    # :: layer2DConfig -> STRING
+    # :: layerConfig -> STRING
     # Produces the compact simulation-family label shown in the layer list
-    def _layerTypeLabel(self, layer: Layer2DConfig) -> str:
+    def _layerTypeLabel(self, layer: LayerConfig) -> str:
+        if isinstance(layer, Layer3DConfig):
+            return "3D"
         return f"W{layer.wolframRule}" if layer.simulationMode == "wolfram_2d" else "2D"
 
     # :: ARRAY<STRING, object> -> NONE

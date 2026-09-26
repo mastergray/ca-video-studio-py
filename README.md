@@ -2,12 +2,14 @@
 
 Native Python/PySide6 application for previewing and exporting deterministic cellular-automata videos.
 
-The current editable milestone supports ordered deterministic 2D layers with
-independent rules and timing, the complete reference 2D rule catalog, custom
-B/S/C rules, elementary Wolfram rules 0–255 rendered as scrolling histories,
-global and optional per-layer seeds, multiple initial-condition types, native
-project editing and persistence, preview controls, and H.264 MP4 export through
-FFmpeg. The broader product is defined in
+The current editable milestone supports ordered deterministic 2D and 3D layers
+with independent rules and timing. It includes the complete reference 2D and 3D
+rule catalogs, custom 2D B/S/C rules, elementary Wolfram rules 0–255 rendered as
+scrolling histories, and isometric surface-voxel rendering for cubic 3D
+automata. Global and optional per-layer seeds, multiple initial-condition types,
+native project editing and persistence, preview controls, mixed-dimensional
+composition, and H.264 MP4 export through FFmpeg share one deterministic
+pipeline. The broader product is defined in
 [`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
 in [`docs/native-ui-design.md`](docs/native-ui-design.md).
 
@@ -43,6 +45,12 @@ Open the Wolfram Rule 30 example:
 
 ```bash
 uv run ca-video gui examples/wolfram-rule-30.cav.json
+```
+
+Open the isometric 3D 445 example:
+
+```bash
+uv run ca-video gui examples/isometric-445.cav.json
 ```
 
 Validate or render without the GUI:

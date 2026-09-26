@@ -11,6 +11,7 @@ from pathlib import Path  # Represent project and output paths
 from typing import Any  # Describe values before schema validation
 
 from ca_video.catalogs.rules_2d import getRule  # Resolve named 2D rule presets
+from ca_video.catalogs.rules_3d import getPalette3D, getRule3D  # Resolve 3D catalogs
 from ca_video.simulation.initialization import parseRle  # Validate inline RLE patterns
 from ca_video.simulation.rules import OuterTotalisticRule, parseRule  # Validate B/S/C rules
 
@@ -29,6 +30,7 @@ ENCODER_PRESETS = {
 }
 INITIAL_TYPES = {"random", "center_block", "disc", "cells", "rle", "catalog_default"}
 WOLFRAM_INITIAL_TYPES = {"single_center", "random", "bits"}
+INITIAL_TYPES_3D = {"random", "center_block", "sphere", "cells", "single", "cross", "catalog_default"}
 
 
 # Indicates that a project configuration is invalid or unsupported
@@ -343,6 +345,12 @@ class Layer2DConfig:
     #
 
     # PROPERTY :: VOID -> STRING
+    # Returns the layer dimensionality
+    @property
+    def dimension(self) -> str:
+        return "2d"
+
+    # PROPERTY :: VOID -> STRING
     # Returns the stable layer identifier
     @property
     def id(self) -> str:
@@ -457,10 +465,199 @@ class Layer2DConfig:
         return self._wolframRule
 
 
+# Stores validated settings for a three-dimensional initializer
+class Initial3DConfig:
+
+    # CONSTRUCTOR :: STRING, FLOAT, INT, ((INT, INT, INT)), STRING -> initial3DConfig
+    # Creates immutable-by-convention voxel initialization settings
+    def __init__(
+        self,
+        type: str,
+        density: float = 1,
+        radius: int = 2,
+        cells: tuple[tuple[int, int, int], ...] = (),
+        origin: str = "center",
+    ) -> None:
+        self._type = type
+        self._density = density
+        self._radius = radius
+        self._cells = cells
+        self._origin = origin
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the initializer type
+    @property
+    def type(self) -> str:
+        return self._type
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the shape fill density
+    @property
+    def density(self) -> float:
+        return self._density
+
+    # PROPERTY :: VOID -> INT
+    # Returns the sphere or block radius
+    @property
+    def radius(self) -> int:
+        return self._radius
+
+    # PROPERTY :: VOID -> ((INT, INT, INT))
+    # Returns explicit voxel coordinates
+    @property
+    def cells(self) -> tuple[tuple[int, int, int], ...]:
+        return self._cells
+
+    # PROPERTY :: VOID -> STRING
+    # Returns whether explicit coordinates are absolute or centered
+    @property
+    def origin(self) -> str:
+        return self._origin
+
+
+# Stores validated settings for an isometric three-dimensional layer
+class Layer3DConfig:
+
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule, STRING, initial3DConfig, INT?, STRING, INT, BOOL -> layer3DConfig
+    # Creates immutable-by-convention 3D layer settings
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        enabled: bool,
+        zIndex: int,
+        opacity: float,
+        stepIntervalMs: int,
+        gridSize: int,
+        boundary: str,
+        rule: OuterTotalisticRule,
+        rulePreset: str,
+        initial: Initial3DConfig,
+        seed: int | None,
+        palette: str,
+        voxelScale: int,
+        surfaceOnly: bool,
+    ) -> None:
+        self._id = id
+        self._name = name
+        self._enabled = enabled
+        self._zIndex = zIndex
+        self._opacity = opacity
+        self._stepIntervalMs = stepIntervalMs
+        self._gridSize = gridSize
+        self._boundary = boundary
+        self._rule = rule
+        self._rulePreset = rulePreset
+        self._initial = initial
+        self._seed = seed
+        self._palette = palette
+        self._voxelScale = voxelScale
+        self._surfaceOnly = surfaceOnly
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the layer dimensionality
+    @property
+    def dimension(self) -> str:
+        return "3d"
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the stable layer identifier
+    @property
+    def id(self) -> str:
+        return self._id
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the display name
+    @property
+    def name(self) -> str:
+        return self._name
+
+    # PROPERTY :: VOID -> BOOL
+    # Returns whether the layer is active
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    # PROPERTY :: VOID -> INT
+    # Returns the visual stacking index
+    @property
+    def zIndex(self) -> int:
+        return self._zIndex
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns layer opacity
+    @property
+    def opacity(self) -> float:
+        return self._opacity
+
+    # PROPERTY :: VOID -> INT
+    # Returns milliseconds between generations
+    @property
+    def stepIntervalMs(self) -> int:
+        return self._stepIntervalMs
+
+    # PROPERTY :: VOID -> INT
+    # Returns the cubic grid axis length
+    @property
+    def gridSize(self) -> int:
+        return self._gridSize
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the boundary mode
+    @property
+    def boundary(self) -> str:
+        return self._boundary
+
+    # PROPERTY :: VOID -> outerTotalisticRule
+    # Returns the parsed 3D rule
+    @property
+    def rule(self) -> OuterTotalisticRule:
+        return self._rule
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the 3D catalog rule key
+    @property
+    def rulePreset(self) -> str:
+        return self._rulePreset
+
+    # PROPERTY :: VOID -> initial3DConfig
+    # Returns the voxel initializer
+    @property
+    def initial(self) -> Initial3DConfig:
+        return self._initial
+
+    # PROPERTY :: VOID -> INT?
+    # Returns the explicit layer seed or None when derived
+    @property
+    def seed(self) -> int | None:
+        return self._seed
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the isometric face palette key
+    @property
+    def palette(self) -> str:
+        return self._palette
+
+    # PROPERTY :: VOID -> INT
+    # Returns zero for automatic sizing or a fixed half-width in pixels
+    @property
+    def voxelScale(self) -> int:
+        return self._voxelScale
+
+    # PROPERTY :: VOID -> BOOL
+    # Returns whether hidden interior voxels are culled
+    @property
+    def surfaceOnly(self) -> bool:
+        return self._surfaceOnly
+
+
+LayerConfig = Layer2DConfig | Layer3DConfig
+
+
 # Stores a fully validated project configuration
 class ProjectConfig:
 
-    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layer2DConfig|(layer2DConfig), path -> projectConfig
+    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layerConfig|(layerConfig), path -> projectConfig
     # Creates immutable-by-convention project settings
     def __init__(
         self,
@@ -469,7 +666,7 @@ class ProjectConfig:
         seed: int,
         output: OutputConfig,
         canvasBackground: tuple[int, int, int],
-        layers: Layer2DConfig | tuple[Layer2DConfig, ...] | list[Layer2DConfig],
+        layers: LayerConfig | tuple[LayerConfig, ...] | list[LayerConfig],
         baseDir: Path,
     ) -> None:
         self._schemaVersion = schemaVersion
@@ -477,7 +674,7 @@ class ProjectConfig:
         self._seed = seed
         self._output = output
         self._canvasBackground = canvasBackground
-        self._layers = (layers,) if isinstance(layers, Layer2DConfig) else tuple(layers)
+        self._layers = (layers,) if isinstance(layers, (Layer2DConfig, Layer3DConfig)) else tuple(layers)
         if not self._layers:
             raise ConfigError("a project requires at least one layer")
         self._baseDir = baseDir
@@ -516,16 +713,16 @@ class ProjectConfig:
     def canvasBackground(self) -> tuple[int, int, int]:
         return self._canvasBackground
 
-    # PROPERTY :: VOID -> layer2DConfig
+    # PROPERTY :: VOID -> layerConfig
     # Returns the configured layer
     @property
-    def layer(self) -> Layer2DConfig:
+    def layer(self) -> LayerConfig:
         return self._layers[0]
 
-    # PROPERTY :: VOID -> (layer2DConfig)
+    # PROPERTY :: VOID -> (layerConfig)
     # Returns all configured layers in editor order
     @property
-    def layers(self) -> tuple[Layer2DConfig, ...]:
+    def layers(self) -> tuple[LayerConfig, ...]:
         return self._layers
 
     # PROPERTY :: VOID -> path
@@ -578,9 +775,42 @@ class ProjectConfig:
         }
 
 
-# :: layer2DConfig -> ARRAY<STRING, ANY>
-# Serializes one normalized two-dimensional layer
-def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
+# :: layerConfig -> ARRAY<STRING, ANY>
+# Serializes one normalized layer
+def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
+    if isinstance(layer, Layer3DConfig):
+        initial = layer.initial
+        initialData: dict[str, Any] = {"type": initial.type}
+        if initial.type in {"random", "center_block", "sphere"}:
+            initialData["density"] = initial.density
+        if initial.type in {"center_block", "sphere"}:
+            initialData["radius"] = initial.radius
+        if initial.type == "cells":
+            initialData["origin"] = initial.origin
+            initialData["cells"] = [list(cell) for cell in initial.cells]
+        return {
+            "id": layer.id,
+            "name": layer.name,
+            **({"seed": layer.seed} if layer.seed is not None else {}),
+            "enabled": layer.enabled,
+            "dimension": "3d",
+            "z_index": layer.zIndex,
+            "opacity": layer.opacity,
+            "step_interval_ms": layer.stepIntervalMs,
+            "simulation": {
+                "mode": "outer_totalistic",
+                "grid": {"grid_size": layer.gridSize, "boundary": layer.boundary},
+                "rule": {"preset": layer.rulePreset},
+                "initial": initialData,
+            },
+            "render": {
+                "style": "isometric_voxel",
+                "palette": layer.palette,
+                "voxel_scale": layer.voxelScale or "auto",
+                "surface_only": layer.surfaceOnly,
+            },
+        }
+
     initial = layer.initial
     initialData: dict[str, Any] = {"type": initial.type}
     if layer.simulationMode == "wolfram_2d":
@@ -643,6 +873,158 @@ def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
             "layout": layer.layout,
         },
     }
+
+
+# :: ARRAY<STRING, ANY>, STRING, STRING, BOOL, INT, FLOAT, INT, INT? -> layer3DConfig
+# Parses a validated common layer envelope as an isometric 3D layer
+def _parseLayer3D(
+    layerData: Mapping[str, Any],
+    layerId: str,
+    layerName: str,
+    enabled: bool,
+    zIndex: int,
+    opacity: float,
+    stepIntervalMs: int,
+    layerSeed: int | None,
+) -> Layer3DConfig:
+    simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
+    _rejectUnknown(simulation, {"mode", "grid", "rule", "initial"}, "layers[0].simulation")
+    if simulation.get("mode") != "outer_totalistic":
+        raise ConfigError("3D layers currently support only outer_totalistic simulation")
+
+    grid = _asMapping(simulation.get("grid"), "layers[0].simulation.grid")
+    _rejectUnknown(grid, {"grid_size", "boundary"}, "layers[0].simulation.grid")
+    gridSize = _asInteger(grid.get("grid_size"), "layers[0].simulation.grid.grid_size", 8, 80)
+    boundary = grid.get("boundary", "fixed")
+    if boundary not in {"wrap", "fixed"}:
+        raise ConfigError("layers[0].simulation.grid.boundary must be wrap or fixed")
+
+    ruleData = _asMapping(simulation.get("rule"), "layers[0].simulation.rule")
+    _rejectUnknown(ruleData, {"preset"}, "layers[0].simulation.rule")
+    rulePreset = ruleData.get("preset")
+    if not isinstance(rulePreset, str):
+        raise ConfigError("layers[0].simulation.rule.preset must be a string")
+    try:
+        catalogRule = getRule3D(rulePreset)
+        parsedRule = catalogRule.rule
+    except (KeyError, ValueError) as error:
+        raise ConfigError(str(error)) from error
+
+    initialData = _asMapping(simulation.get("initial"), "layers[0].simulation.initial")
+    _rejectUnknown(initialData, {"type", "density", "radius", "cells", "origin"}, "layers[0].simulation.initial")
+    initialType = initialData.get("type")
+    if initialType not in INITIAL_TYPES_3D:
+        choices = ", ".join(sorted(INITIAL_TYPES_3D))
+        raise ConfigError(f"layers[0].simulation.initial.type must be one of {choices}")
+    if initialType == "catalog_default":
+        initialType = catalogRule.recommendedInitial
+    defaultDensity = catalogRule.density if initialType in {"sphere", "center_block"} else 0.2
+    density = _asNumber(initialData.get("density", defaultDensity), "layers[0].simulation.initial.density", 0, 1)
+    radius = _asInteger(
+        initialData.get("radius", max(1, gridSize // 4)),
+        "layers[0].simulation.initial.radius",
+        1,
+        gridSize,
+    )
+    if initialType in {"sphere", "center_block"} and radius * 2 + 1 > gridSize:
+        raise ConfigError("initial radius is too large for the configured 3D grid")
+    origin = initialData.get("origin", "center")
+    if origin not in {"center", "absolute"}:
+        raise ConfigError("layers[0].simulation.initial.origin must be center or absolute")
+    cells: tuple[tuple[int, int, int], ...] = ()
+    if initialType == "cells":
+        cellValues = initialData.get("cells", [])
+        if not isinstance(cellValues, list):
+            raise ConfigError("layers[0].simulation.initial.cells must be a list")
+        parsedCells: list[tuple[int, int, int]] = []
+        for index, cell in enumerate(cellValues):
+            if not isinstance(cell, list) or len(cell) != 3:
+                raise ConfigError(f"layers[0].simulation.initial.cells[{index}] must contain [x, y, z]")
+            coordinates = tuple(
+                _asInteger(value, f"layers[0].simulation.initial.cells[{index}][{axis}]", -80, 80)
+                for axis, value in enumerate(cell)
+            )
+            if boundary == "fixed":
+                offset = gridSize // 2 if origin == "center" else 0
+                if not all(0 <= value + offset < gridSize for value in coordinates):
+                    raise ConfigError(f"layers[0].simulation.initial.cells[{index}] is outside the fixed grid")
+            parsedCells.append(coordinates)
+        cells = tuple(parsedCells)
+    initial = Initial3DConfig(initialType, density, radius, cells, origin)
+
+    render = _asMapping(layerData.get("render"), "layers[0].render")
+    _rejectUnknown(render, {"style", "palette", "voxel_scale", "surface_only"}, "layers[0].render")
+    if render.get("style") != "isometric_voxel":
+        raise ConfigError("3D layers currently support only the isometric_voxel render style")
+    palette = render.get("palette", rulePreset)
+    if not isinstance(palette, str):
+        raise ConfigError("layers[0].render.palette must be a string")
+    try:
+        getPalette3D(palette)
+    except KeyError as error:
+        raise ConfigError(str(error)) from error
+    voxelScaleValue = render.get("voxel_scale", "auto")
+    voxelScale = (
+        0
+        if voxelScaleValue == "auto"
+        else _asInteger(voxelScaleValue, "layers[0].render.voxel_scale", 2, 64)
+    )
+    surfaceOnly = render.get("surface_only", True)
+    if not isinstance(surfaceOnly, bool):
+        raise ConfigError("layers[0].render.surface_only must be true or false")
+    return Layer3DConfig(
+        layerId,
+        layerName.strip(),
+        enabled,
+        zIndex,
+        opacity,
+        stepIntervalMs,
+        gridSize,
+        boundary,
+        parsedRule,
+        rulePreset,
+        initial,
+        layerSeed,
+        palette,
+        voxelScale,
+        surfaceOnly,
+    )
+
+
+# :: ARRAY<STRING, ANY>, [ANY], layerConfig, INT, STRING, INT, outputConfig, (INT, INT, INT), path -> projectConfig
+# Parses remaining layers and completes a project model
+def _completeProject(
+    root: Mapping[str, Any],
+    layers: list[Any],
+    firstLayer: LayerConfig,
+    schemaVersion: int,
+    name: str,
+    seed: int,
+    output: OutputConfig,
+    background: tuple[int, int, int],
+    resolvedBaseDir: Path,
+) -> ProjectConfig:
+    parsedLayers = [firstLayer]
+    for layerIndex, extraLayerData in enumerate(layers[1:], 1):
+        extraProjectData = dict(root)
+        extraProjectData["layers"] = [extraLayerData]
+        try:
+            parsedLayers.append(parseProject(extraProjectData, resolvedBaseDir).layer)
+        except ConfigError as error:
+            message = str(error).replace("layers[0]", f"layers[{layerIndex}]")
+            raise ConfigError(message) from error
+    layerIds = [parsedLayer.id for parsedLayer in parsedLayers]
+    if len(layerIds) != len(set(layerIds)):
+        raise ConfigError("layer IDs must be unique")
+    return ProjectConfig(
+        schemaVersion,
+        name.strip(),
+        seed,
+        output,
+        background,
+        tuple(parsedLayers),
+        resolvedBaseDir,
+    )
 
 
 # :: ARRAY<STRING, ANY>, path? -> projectConfig
@@ -726,11 +1108,35 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     enabled = layerData.get("enabled", True)
     if not isinstance(enabled, bool):
         raise ConfigError("layers[0].enabled must be true or false")
-    if layerData.get("dimension") != "2d":
-        raise ConfigError("the current milestone supports only a 2d layer")
+    dimension = layerData.get("dimension")
+    if dimension not in {"2d", "3d"}:
+        raise ConfigError("layers[0].dimension must be 2d or 3d")
     zIndex = _asInteger(layerData.get("z_index", 0), "layers[0].z_index", -10_000, 10_000)
     opacity = _asNumber(layerData.get("opacity", 1), "layers[0].opacity", 0, 1)
     stepIntervalMs = _asInteger(layerData.get("step_interval_ms", 100), "layers[0].step_interval_ms", 1, 60_000)
+
+    if dimension == "3d":
+        layer3D = _parseLayer3D(
+            layerData,
+            layerId,
+            layerName,
+            enabled,
+            zIndex,
+            opacity,
+            stepIntervalMs,
+            layerSeed,
+        )
+        return _completeProject(
+            root,
+            layers,
+            layer3D,
+            schemaVersion,
+            name,
+            seed,
+            output,
+            background,
+            resolvedBaseDir,
+        )
 
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
     _rejectUnknown(simulation, {"mode", "grid", "rule", "initial"}, "layers[0].simulation")
@@ -945,25 +1351,15 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         simulationMode,
         wolframRule,
     )
-    parsedLayers = [layer]
-    for layerIndex, extraLayerData in enumerate(layers[1:], 1):
-        extraProjectData = dict(root)
-        extraProjectData["layers"] = [extraLayerData]
-        try:
-            parsedLayers.append(parseProject(extraProjectData, resolvedBaseDir).layer)
-        except ConfigError as error:
-            message = str(error).replace("layers[0]", f"layers[{layerIndex}]")
-            raise ConfigError(message) from error
-    layerIds = [parsedLayer.id for parsedLayer in parsedLayers]
-    if len(layerIds) != len(set(layerIds)):
-        raise ConfigError("layer IDs must be unique")
-    return ProjectConfig(
+    return _completeProject(
+        root,
+        layers,
+        layer,
         schemaVersion,
-        name.strip(),
+        name,
         seed,
         output,
         background,
-        tuple(parsedLayers),
         resolvedBaseDir,
     )
 

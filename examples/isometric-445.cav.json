@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Isometric 445",
+    "seed": 445
+  },
+  "output": {
+    "path": "renders/isometric-445.mp4",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_seconds": 10,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#0d1117"
+  },
+  "layers": [
+    {
+      "id": "voxel_445",
+      "name": "3D 445",
+      "enabled": true,
+      "dimension": "3d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 100,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "grid_size": 24,
+          "boundary": "fixed"
+        },
+        "rule": {
+          "preset": "445"
+        },
+        "initial": {
+          "type": "catalog_default"
+        }
+      },
+      "render": {
+        "style": "isometric_voxel",
+        "palette": "445",
+        "voxel_scale": "auto",
+        "surface_only": true
+      }
+    }
+  ]
+}

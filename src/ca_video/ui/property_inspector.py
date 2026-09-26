@@ -5,6 +5,7 @@ from copy import deepcopy  # Build isolated editable project mappings
 from PySide6.QtCore import Qt, QTimer, Signal  # Debounce text edits and publish validated changes
 from PySide6.QtGui import QColor  # Convert native color selections
 from PySide6.QtWidgets import (  # Build the project and layer inspector forms
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
@@ -22,7 +23,13 @@ from PySide6.QtWidgets import (  # Build the project and layer inspector forms
 )
 
 from ca_video.catalogs.rules_2d import ruleCatalog  # Populate categorized rule choices
-from ca_video.config.models import ProjectConfig, colorToHex  # Present normalized project values
+from ca_video.catalogs.rules_3d import palette3DCatalog, rule3DCatalog  # Populate 3D choices
+from ca_video.config.models import (  # Present normalized project and layer values
+    Layer2DConfig,
+    Layer3DConfig,
+    ProjectConfig,
+    colorToHex,
+)
 from ca_video.services.runtime import stableLayerSeed  # Display deterministic derived layer seeds
 
 RESOLUTIONS = ((640, 360), (960, 540), (1280, 720), (1920, 1080))
@@ -134,46 +141,56 @@ class PropertyInspector(QWidget):
         self._layerSeedMode.setCurrentIndex(max(0, seedModeIndex))
         resolvedSeed = layer.seed if layer.seed is not None else stableLayerSeed(project.seed, layer.id)
         self._layerSeed.setText(str(resolvedSeed))
-        modeIndex = self._simulationMode.findData(layer.simulationMode)
-        self._simulationMode.setCurrentIndex(max(0, modeIndex))
-        self._wolframRule.setValue(layer.wolframRule if layer.wolframRule is not None else 30)
-        if layer.rule is not None:
-            ruleIndex = self._rulePreset.findData(layer.rulePreset or "custom")
-            self._rulePreset.setCurrentIndex(max(0, ruleIndex))
-            self._customNotation.setText(layer.rule.notation)
-            neighborhoodIndex = self._neighborhood.findData(layer.rule.neighborhood)
-            self._neighborhood.setCurrentIndex(max(0, neighborhoodIndex))
-        gridModeIndex = self._gridMode.findData("cell_size" if layer.cellSizePx is not None else "size")
-        self._gridMode.setCurrentIndex(max(0, gridModeIndex))
-        self._gridWidth.setValue(layer.gridWidth)
-        self._gridHeight.setValue(layer.gridHeight)
-        self._cellSize.setValue(layer.cellSizePx or 4)
         self._boundary.setCurrentIndex(max(0, self._boundary.findData(layer.boundary)))
-
-        self._populateInitialTypes(layer.simulationMode, initial.type)
         self._density.setValue(initial.density)
         self._radius.setValue(initial.radius)
-        self._offsetX.setValue(initial.offsetPx[0])
-        self._offsetY.setValue(initial.offsetPx[1])
         self._origin.setCurrentIndex(max(0, self._origin.findData(initial.origin)))
-        self._cells.setPlainText("\n".join(f"{xValue},{yValue}" for xValue, yValue in initial.cells))
-        rleText = initial.rleData or ""
-        if not rleText and initial.rlePath is not None:
-            source = initial.rlePath if initial.rlePath.is_absolute() else project.baseDir / initial.rlePath
-            try:
-                rleText = source.read_text(encoding="utf-8")
-            except OSError:
-                rleText = ""
-        self._rle.setPlainText(rleText or "x = 3, y = 3\nbob$2bo$3o!")
-        self._bits.setText("".join(str(bit) for bit in initial.bits) or "1")
+        if isinstance(layer, Layer3DConfig):
+            self._rule3D.setCurrentIndex(max(0, self._rule3D.findData(layer.rulePreset)))
+            self._gridSize3D.setValue(layer.gridSize)
+            self._populateInitialTypes("3d", initial.type)
+            self._cells.setPlainText(
+                "\n".join(f"{xValue},{yValue},{zValue}" for xValue, yValue, zValue in initial.cells)
+            )
+            self._cells.setPlaceholderText("One x,y,z voxel coordinate per line")
+            self._palette3D.setCurrentIndex(max(0, self._palette3D.findData(layer.palette)))
+            self._voxelScale.setValue(layer.voxelScale)
+            self._surfaceOnly.setChecked(layer.surfaceOnly)
+        else:
+            modeIndex = self._simulationMode.findData(layer.simulationMode)
+            self._simulationMode.setCurrentIndex(max(0, modeIndex))
+            self._wolframRule.setValue(layer.wolframRule if layer.wolframRule is not None else 30)
+            if layer.rule is not None:
+                ruleIndex = self._rulePreset.findData(layer.rulePreset or "custom")
+                self._rulePreset.setCurrentIndex(max(0, ruleIndex))
+                self._customNotation.setText(layer.rule.notation)
+                neighborhoodIndex = self._neighborhood.findData(layer.rule.neighborhood)
+                self._neighborhood.setCurrentIndex(max(0, neighborhoodIndex))
+            gridModeIndex = self._gridMode.findData("cell_size" if layer.cellSizePx is not None else "size")
+            self._gridMode.setCurrentIndex(max(0, gridModeIndex))
+            self._gridWidth.setValue(layer.gridWidth)
+            self._gridHeight.setValue(layer.gridHeight)
+            self._cellSize.setValue(layer.cellSizePx or 4)
+            self._populateInitialTypes(layer.simulationMode, initial.type)
+            self._offsetX.setValue(initial.offsetPx[0])
+            self._offsetY.setValue(initial.offsetPx[1])
+            self._cells.setPlainText("\n".join(f"{xValue},{yValue}" for xValue, yValue in initial.cells))
+            self._cells.setPlaceholderText("One x,y cell coordinate per line")
+            rleText = initial.rleData or ""
+            if not rleText and initial.rlePath is not None:
+                source = initial.rlePath if initial.rlePath.is_absolute() else project.baseDir / initial.rlePath
+                try:
+                    rleText = source.read_text(encoding="utf-8")
+                except OSError:
+                    rleText = ""
+            self._rle.setPlainText(rleText or "x = 3, y = 3\nbob$2bo$3o!")
+            self._bits.setText("".join(str(bit) for bit in initial.bits) or "1")
+            self._liveColor.setColor(colorToHex(layer.liveColor))
+            self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
 
-        self._liveColor.setColor(colorToHex(layer.liveColor))
         self._opacity.setValue(layer.opacity)
-        self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
         self._stepInterval.setValue(layer.stepIntervalMs)
-        self._syncSimulationControls()
-        self._syncGridControls()
-        self._syncInitialControls()
+        self._syncDimensionControls()
         self._syncSeedControls()
         self._updateResolvedSeed()
         self._loading = False
@@ -204,31 +221,47 @@ class PropertyInspector(QWidget):
             layerData["seed"] = self._seedValue(self._layerSeed, "Layer seed")
         else:
             layerData.pop("seed", None)
-        simulationMode = self._simulationMode.currentData()
-        simulationData["mode"] = simulationMode
-        if simulationMode == "wolfram_2d":
-            simulationData["rule"] = {"number": self._wolframRule.value()}
+        layer = self._project.layers[self._layerIndex]
+        if isinstance(layer, Layer3DConfig):
+            simulationData["mode"] = "outer_totalistic"
+            simulationData["rule"] = {"preset": self._rule3D.currentData()}
+            simulationData["grid"] = {
+                "grid_size": self._gridSize3D.value(),
+                "boundary": self._boundary.currentData(),
+            }
+            simulationData["initial"] = self._initialData()
+            layerData["render"] = {
+                "style": "isometric_voxel",
+                "palette": self._palette3D.currentData(),
+                "voxel_scale": self._voxelScale.value() or "auto",
+                "surface_only": self._surfaceOnly.isChecked(),
+            }
         else:
-            ruleKey = self._rulePreset.currentData()
-            simulationData["rule"] = (
-                {
-                    "notation": self._customNotation.text().strip(),
-                    "neighborhood": self._neighborhood.currentData(),
-                }
-                if ruleKey == "custom"
-                else {"preset": ruleKey}
-            )
-        gridData = {
-            "boundary": "wrap" if simulationMode == "wolfram_2d" else self._boundary.currentData()
-        }
-        if self._gridMode.currentData() == "cell_size":
-            gridData["cell_size_px"] = self._cellSize.value()
-        else:
-            gridData["size"] = [self._gridWidth.value(), self._gridHeight.value()]
-        simulationData["grid"] = gridData
-        simulationData["initial"] = self._initialData()
-        layerData["render"]["color"] = self._liveColor.color
-        layerData["render"]["layout"] = self._layout.currentData()
+            simulationMode = self._simulationMode.currentData()
+            simulationData["mode"] = simulationMode
+            if simulationMode == "wolfram_2d":
+                simulationData["rule"] = {"number": self._wolframRule.value()}
+            else:
+                ruleKey = self._rulePreset.currentData()
+                simulationData["rule"] = (
+                    {
+                        "notation": self._customNotation.text().strip(),
+                        "neighborhood": self._neighborhood.currentData(),
+                    }
+                    if ruleKey == "custom"
+                    else {"preset": ruleKey}
+                )
+            gridData = {
+                "boundary": "wrap" if simulationMode == "wolfram_2d" else self._boundary.currentData()
+            }
+            if self._gridMode.currentData() == "cell_size":
+                gridData["cell_size_px"] = self._cellSize.value()
+            else:
+                gridData["size"] = [self._gridWidth.value(), self._gridHeight.value()]
+            simulationData["grid"] = gridData
+            simulationData["initial"] = self._initialData()
+            layerData["render"]["color"] = self._liveColor.color
+            layerData["render"]["layout"] = self._layout.currentData()
         layerData["opacity"] = self._opacity.value()
         layerData["step_interval_ms"] = self._stepInterval.value()
         return data
@@ -285,6 +318,14 @@ class PropertyInspector(QWidget):
             previousCategory = entry.category
         self._rulePreset.insertSeparator(self._rulePreset.count())
         self._rulePreset.addItem("Custom B/S/C rule…", "custom")
+        self._rule3D = QComboBox()
+        previousCategory = None
+        for entry in rule3DCatalog():
+            if previousCategory is not None and entry.category != previousCategory:
+                self._rule3D.insertSeparator(self._rule3D.count())
+            self._rule3D.addItem(f"{entry.name}  ·  {entry.notation}", entry.key)
+            self._rule3D.setItemData(self._rule3D.count() - 1, entry.description, 3)
+            previousCategory = entry.category
         self._customNotation = QLineEdit("B3/S23")
         self._customNotation.setPlaceholderText("B3/S23 or B2/S/C3")
         self._wolframRule = self._spinBox(0, 255)
@@ -298,6 +339,7 @@ class PropertyInspector(QWidget):
         self._gridMode.addItem("Cell size from export", "cell_size")
         self._gridWidth = self._spinBox(8, 2048)
         self._gridHeight = self._spinBox(8, 2048)
+        self._gridSize3D = self._spinBox(8, 80)
         self._cellSize = self._spinBox(1, 128, " px")
         self._derivedGrid = QLabel()
         self._derivedGrid.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -306,12 +348,14 @@ class PropertyInspector(QWidget):
         self._boundary.addItem("Fixed", "fixed")
         simulationForm.addRow("Rule type", self._simulationMode)
         simulationForm.addRow("Rule", self._rulePreset)
+        simulationForm.addRow("3D rule", self._rule3D)
         simulationForm.addRow("Notation", self._customNotation)
         simulationForm.addRow("Neighborhood", self._neighborhood)
         simulationForm.addRow("Wolfram rule", self._wolframRule)
         simulationForm.addRow("Grid mode", self._gridMode)
         simulationForm.addRow("Grid width", self._gridWidth)
         simulationForm.addRow("Grid height", self._gridHeight)
+        simulationForm.addRow("Cubic grid", self._gridSize3D)
         simulationForm.addRow("Cell size", self._cellSize)
         simulationForm.addRow("Derived grid", self._derivedGrid)
         simulationForm.addRow("Boundary", self._boundary)
@@ -354,6 +398,7 @@ class PropertyInspector(QWidget):
 
         appearance = QGroupBox("Appearance")
         appearanceForm = QFormLayout(appearance)
+        self._appearanceForm = appearanceForm
         self._liveColor = ColorButton("#e8f4ff")
         self._opacity = QDoubleSpinBox()
         self._opacity.setRange(0, 1)
@@ -362,9 +407,18 @@ class PropertyInspector(QWidget):
         self._layout = QComboBox()
         self._layout.addItem("Fit", "fit")
         self._layout.addItem("Cover", "cover")
+        self._palette3D = QComboBox()
+        for palette in palette3DCatalog():
+            self._palette3D.addItem(palette.key.replace("_", " ").title(), palette.key)
+        self._voxelScale = self._spinBox(0, 64, " px")
+        self._voxelScale.setSpecialValueText("Auto")
+        self._surfaceOnly = QCheckBox("Cull fully enclosed voxels")
         appearanceForm.addRow("Live color", self._liveColor)
         appearanceForm.addRow("Opacity", self._opacity)
         appearanceForm.addRow("Layout", self._layout)
+        appearanceForm.addRow("Face palette", self._palette3D)
+        appearanceForm.addRow("Voxel scale", self._voxelScale)
+        appearanceForm.addRow("Surface only", self._surfaceOnly)
         layout.addWidget(appearance)
 
         timing = QGroupBox("Timing")
@@ -376,6 +430,7 @@ class PropertyInspector(QWidget):
 
         self._simulationMode.currentIndexChanged.connect(self._simulationModeChanged)
         self._rulePreset.currentIndexChanged.connect(self._ruleChanged)
+        self._rule3D.currentIndexChanged.connect(lambda _value: self._emitChange(True))
         self._gridMode.currentIndexChanged.connect(self._gridModeChanged)
         self._initialType.currentIndexChanged.connect(self._initialChanged)
         self._layerSeedMode.currentIndexChanged.connect(self._seedModeChanged)
@@ -388,6 +443,7 @@ class PropertyInspector(QWidget):
             self._wolframRule,
             self._gridWidth,
             self._gridHeight,
+            self._gridSize3D,
             self._boundary,
             self._density,
             self._radius,
@@ -405,6 +461,9 @@ class PropertyInspector(QWidget):
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
         self._opacity.valueChanged.connect(lambda _value: self._emitChange(False))
         self._layout.currentIndexChanged.connect(self._layoutChanged)
+        self._palette3D.currentIndexChanged.connect(lambda _value: self._emitChange(False))
+        self._voxelScale.valueChanged.connect(lambda _value: self._emitChange(False))
+        self._surfaceOnly.toggled.connect(lambda _checked: self._emitChange(False))
         return container
 
     # :: VOID -> widget
@@ -506,21 +565,29 @@ class PropertyInspector(QWidget):
     def _populateInitialTypes(self, simulationMode: str, selectedType: str) -> None:
         self._initialType.blockSignals(True)
         self._initialType.clear()
-        choices = (
-            (
+        if simulationMode == "3d":
+            choices = (
+                ("Random voxels", "random"),
+                ("Sphere", "sphere"),
+                ("Center block", "center_block"),
+                ("Explicit voxels", "cells"),
+                ("Single center voxel", "single"),
+                ("Orthogonal cross", "cross"),
+            )
+        elif simulationMode == "wolfram_2d":
+            choices = (
                 ("Single center cell", "single_center"),
                 ("Seeded random row", "random"),
                 ("Explicit centered bits", "bits"),
             )
-            if simulationMode == "wolfram_2d"
-            else (
+        else:
+            choices = (
                 ("Random", "random"),
                 ("Center block", "center_block"),
                 ("Disc", "disc"),
                 ("Explicit cells", "cells"),
                 ("RLE pattern", "rle"),
             )
-        )
         for label, value in choices:
             self._initialType.addItem(label, value)
         selectedIndex = self._initialType.findData(selectedType)
@@ -530,10 +597,13 @@ class PropertyInspector(QWidget):
     # :: VOID -> NONE
     # Shows controls belonging to the active simulation family
     def _syncSimulationControls(self) -> None:
+        is3D = self._is3DLayer()
         wolfram = self._simulationMode.currentData() == "wolfram_2d"
-        self._setFieldVisible(self._simulationForm, self._rulePreset, not wolfram)
-        self._setFieldVisible(self._simulationForm, self._wolframRule, wolfram)
-        self._setFieldVisible(self._simulationForm, self._boundary, not wolfram)
+        self._setFieldVisible(self._simulationForm, self._simulationMode, not is3D)
+        self._setFieldVisible(self._simulationForm, self._rulePreset, not is3D and not wolfram)
+        self._setFieldVisible(self._simulationForm, self._rule3D, is3D)
+        self._setFieldVisible(self._simulationForm, self._wolframRule, not is3D and wolfram)
+        self._setFieldVisible(self._simulationForm, self._boundary, is3D or not wolfram)
         self._syncRuleControls()
         self._syncInitialControls()
 
@@ -541,6 +611,8 @@ class PropertyInspector(QWidget):
     # Shows custom rule controls only when applicable
     def _syncRuleControls(self) -> None:
         custom = (
+            not self._is3DLayer()
+            and
             self._simulationMode.currentData() == "outer_totalistic"
             and self._rulePreset.currentData() == "custom"
         )
@@ -550,12 +622,15 @@ class PropertyInspector(QWidget):
     # :: VOID -> NONE
     # Shows either explicit grid dimensions or export-relative cell sizing
     def _syncGridControls(self) -> None:
+        is3D = self._is3DLayer()
         derived = self._gridMode.currentData() == "cell_size"
-        self._setFieldVisible(self._simulationForm, self._gridWidth, not derived)
-        self._setFieldVisible(self._simulationForm, self._gridHeight, not derived)
-        self._setFieldVisible(self._simulationForm, self._cellSize, derived)
-        self._setFieldVisible(self._simulationForm, self._derivedGrid, derived)
-        if derived:
+        self._setFieldVisible(self._simulationForm, self._gridMode, not is3D)
+        self._setFieldVisible(self._simulationForm, self._gridWidth, not is3D and not derived)
+        self._setFieldVisible(self._simulationForm, self._gridHeight, not is3D and not derived)
+        self._setFieldVisible(self._simulationForm, self._gridSize3D, is3D)
+        self._setFieldVisible(self._simulationForm, self._cellSize, not is3D and derived)
+        self._setFieldVisible(self._simulationForm, self._derivedGrid, not is3D and derived)
+        if derived and not is3D:
             width, height = RESOLUTIONS[self._resolution.currentIndex()]
             cellSize = self._cellSize.value()
             gridWidth = (width + cellSize - 1) // cellSize
@@ -585,10 +660,12 @@ class PropertyInspector(QWidget):
         )
         if self._project is not None:
             usesDerivedGrid = usesDerivedGrid or any(
-                layer.cellSizePx is not None for layer in self._project.layers
+                isinstance(layer, Layer2DConfig) and layer.cellSizePx is not None
+                for layer in self._project.layers
             )
             usesPixelOffset = usesPixelOffset or any(
-                layer.initial.offsetPx != (0, 0) for layer in self._project.layers
+                isinstance(layer, Layer2DConfig) and layer.initial.offsetPx != (0, 0)
+                for layer in self._project.layers
             )
         self._emitChange(usesDerivedGrid or usesPixelOffset)
 
@@ -652,19 +729,53 @@ class PropertyInspector(QWidget):
     # :: VOID -> NONE
     # Shows only fields used by the selected initializer
     def _syncInitialControls(self) -> None:
+        is3D = self._is3DLayer()
         initialType = self._initialType.currentData()
         self._setFieldVisible(
             self._initialForm,
             self._density,
-            initialType in {"random", "center_block", "disc"},
+            initialType in {"random", "center_block", "disc", "sphere"},
         )
-        self._setFieldVisible(self._initialForm, self._radius, initialType in {"center_block", "disc"})
-        self._setFieldVisible(self._initialForm, self._offsetX, initialType in {"center_block", "disc"})
-        self._setFieldVisible(self._initialForm, self._offsetY, initialType in {"center_block", "disc"})
+        self._setFieldVisible(
+            self._initialForm,
+            self._radius,
+            initialType in {"center_block", "disc", "sphere"},
+        )
+        self._setFieldVisible(
+            self._initialForm,
+            self._offsetX,
+            not is3D and initialType in {"center_block", "disc"},
+        )
+        self._setFieldVisible(
+            self._initialForm,
+            self._offsetY,
+            not is3D and initialType in {"center_block", "disc"},
+        )
         self._setFieldVisible(self._initialForm, self._origin, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._cells, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._rle, initialType == "rle")
         self._setFieldVisible(self._initialForm, self._bits, initialType == "bits")
+
+    # :: VOID -> BOOL
+    # Returns whether the selected model is a three-dimensional layer
+    def _is3DLayer(self) -> bool:
+        return (
+            self._project is not None
+            and isinstance(self._project.layers[self._layerIndex], Layer3DConfig)
+        )
+
+    # :: VOID -> NONE
+    # Applies all contextual visibility for the selected layer dimension
+    def _syncDimensionControls(self) -> None:
+        is3D = self._is3DLayer()
+        self._syncSimulationControls()
+        self._syncGridControls()
+        self._syncInitialControls()
+        self._setFieldVisible(self._appearanceForm, self._liveColor, not is3D)
+        self._setFieldVisible(self._appearanceForm, self._layout, not is3D)
+        self._setFieldVisible(self._appearanceForm, self._palette3D, is3D)
+        self._setFieldVisible(self._appearanceForm, self._voxelScale, is3D)
+        self._setFieldVisible(self._appearanceForm, self._surfaceOnly, is3D)
 
     # :: formLayout, widget, BOOL -> NONE
     # Shows or hides a form field together with its label
@@ -689,7 +800,8 @@ class PropertyInspector(QWidget):
     # Builds the selected initializer mapping
     def _initialData(self) -> dict[str, object]:
         initialType = self._initialType.currentData()
-        if initialType == "single_center":
+        is3D = self._is3DLayer()
+        if initialType in {"single_center", "single", "cross"}:
             return {"type": initialType}
         if initialType == "bits":
             compact = "".join(self._bits.text().split())
@@ -698,23 +810,27 @@ class PropertyInspector(QWidget):
             return {"type": initialType, "bits": [int(character) for character in compact]}
         if initialType == "random":
             return {"type": initialType, "density": self._density.value()}
-        if initialType in {"center_block", "disc"}:
-            return {
+        if initialType in {"center_block", "disc", "sphere"}:
+            data: dict[str, object] = {
                 "type": initialType,
                 "density": self._density.value(),
                 "radius": self._radius.value(),
-                "offset_px": [self._offsetX.value(), self._offsetY.value()],
             }
+            if not is3D:
+                data["offset_px"] = [self._offsetX.value(), self._offsetY.value()]
+            return data
         if initialType == "cells":
             cells: list[list[int]] = []
             for lineNumber, line in enumerate(self._cells.toPlainText().splitlines(), 1):
                 if not line.strip():
                     continue
                 parts = [part.strip() for part in line.split(",")]
-                if len(parts) != 2:
-                    raise ValueError(f"Cell line {lineNumber} must contain x,y")
+                coordinateCount = 3 if is3D else 2
+                coordinateLabel = "x,y,z" if is3D else "x,y"
+                if len(parts) != coordinateCount:
+                    raise ValueError(f"Cell line {lineNumber} must contain {coordinateLabel}")
                 try:
-                    cells.append([int(parts[0]), int(parts[1])])
+                    cells.append([int(part) for part in parts])
                 except ValueError as error:
                     raise ValueError(f"Cell line {lineNumber} must contain integers") from error
             return {"type": initialType, "origin": self._origin.currentData(), "cells": cells}

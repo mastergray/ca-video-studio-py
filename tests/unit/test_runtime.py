@@ -2,6 +2,7 @@ import numpy as np  # Compare rendered frame buffers
 
 from ca_video.config.models import defaultProject, parseProject  # Create deterministic test projects
 from ca_video.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
+from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Identify voxel runtime layers
 from ca_video.simulation.wolfram import WolframEngine  # Identify Wolfram runtime layers
 
 
@@ -166,3 +167,37 @@ def test_shape_pixel_offset_uses_cover_layout_scale() -> None:
     runtime = ProjectRuntime(project, (320, 180))
 
     assert runtime._shapeOffsetCells(project.layer) == (10, 10)
+
+
+def test_mixed_2d_and_3d_layers_render_on_independent_clocks() -> None:
+    data = defaultProject().toDict()
+    data["layers"].append(
+        {
+            "id": "voxel_crystal",
+            "name": "Voxel Crystal",
+            "dimension": "3d",
+            "z_index": 1,
+            "step_interval_ms": 200,
+            "opacity": 0.75,
+            "simulation": {
+                "mode": "outer_totalistic",
+                "grid": {"grid_size": 16, "boundary": "fixed"},
+                "rule": {"preset": "crystal"},
+                "initial": {"type": "cross"},
+            },
+            "render": {
+                "style": "isometric_voxel",
+                "palette": "crystal",
+                "surface_only": True,
+            },
+        }
+    )
+    runtime = ProjectRuntime(parseProject(data), (320, 180))
+
+    frame = runtime.renderAtTick(6, 30)
+
+    assert runtime.engineForLayer(0).generation == 2
+    assert runtime.engineForLayer(1).generation == 1
+    assert isinstance(runtime.engineForLayer(1), OuterTotalisticEngine3D)
+    assert frame.shape == (180, 320, 3)
+    assert frame.max() > 0

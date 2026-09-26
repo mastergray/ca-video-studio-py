@@ -96,3 +96,53 @@ def test_wolfram_project_exports_through_shared_pipeline(tmp_path) -> None:
         "height": 180,
         "nb_frames": "2",
     }
+
+
+def test_3d_project_exports_through_shared_pipeline(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    data["output"].update(
+        {
+            "width": 320,
+            "height": 180,
+            "fps": 10,
+            "duration_seconds": 0.2,
+            "encoder_preset": "ultrafast",
+        }
+    )
+    data["layers"][0] = {
+        "id": "crystal",
+        "name": "Crystal",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 16, "boundary": "fixed"},
+            "rule": {"preset": "crystal"},
+            "initial": {"type": "cross"},
+        },
+        "render": {"style": "isometric_voxel", "palette": "crystal"},
+    }
+    output = tmp_path / "crystal.mp4"
+    renderProject(parseProject(data, tmp_path), output)
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,nb_frames",
+            "-of",
+            "json",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(probe.stdout)["streams"][0] == {
+        "width": 320,
+        "height": 180,
+        "nb_frames": "2",
+    }

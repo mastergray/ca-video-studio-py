@@ -224,3 +224,28 @@ def test_disc_offset_is_edited_in_export_pixels() -> None:
     assert window.runtime._shapeOffsetCells(window.project.layer) == (13, -7)
     window._setDirty(False)
     window.close()
+
+
+def test_add_and_edit_3d_layer() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+
+    window._add3DLayer()
+    inspector = window.inspector
+    inspector._rule3D.setCurrentIndex(inspector._rule3D.findData("crystal"))
+    inspector._gridSize3D.setValue(20)
+    inspector._initialType.setCurrentIndex(inspector._initialType.findData("cross"))
+    inspector._palette3D.setCurrentIndex(inspector._palette3D.findData("crystal"))
+    app.processEvents()
+
+    layer = window.project.layer
+    assert layer.dimension == "3d"
+    assert layer.rulePreset == "crystal"
+    assert layer.gridSize == 20
+    assert layer.initial.type == "cross"
+    assert window._layerList.item(0).text().endswith("3D")
+    assert "20³" in window._infoLabel.text()
+    assert inspector._rule3D.isVisibleTo(inspector)
+    assert not inspector._simulationMode.isVisibleTo(inspector)
+    window._setDirty(False)
+    window.close()

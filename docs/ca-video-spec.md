@@ -4,6 +4,15 @@ Status: Draft for implementation
 Version: 0.3
 Date: 2026-09-26
 
+Current implementation milestone: deterministic 2D, Wolfram 2D, and
+outer-totalistic 3D layers can be mixed, previewed, saved, reopened, and
+exported. The 3D milestone includes the complete required rule and face-palette
+catalogs, cubic grids, fixed and wrapped boundaries, seeded random/geometric/
+explicit initialization, and depth-ordered `isometric_voxel` rendering with
+automatic or fixed scale and optional surface-only extraction. The projected
+voxel renderer, camera controls, 3D custom-rule editor, fades, trails, and
+extruded Wolfram 3D remain later milestones.
+
 ## 1. Summary
 
 CA Video Generator is a local-first Python application for designing, previewing, and exporting deterministic cellular-automata videos. It combines the offline MP4 workflow in `ref/ca_video` with the useful visual and simulation options in `midi-ca-server-2`: layered 2D and 3D automata, larger rule and palette catalogs, independent layer timing, Wolfram modes, smooth visual transitions, and isometric voxel rendering.
@@ -375,6 +384,10 @@ Two styles are required:
 
 1. `isometric_voxel`: diamond-topped cuboids with top, left, right, and outline colors, based on the reference server.
 2. `projected_voxel`: camera-rotated square voxel splats with perspective and a depth buffer, based on the Python proof of concept.
+
+Implementation status: `isometric_voxel` is available in the native editor,
+project schema, preview runtime, and MP4 exporter. `projected_voxel` is the next
+3D renderer milestone and is not yet exposed as a selectable control.
 
 Common controls:
 
