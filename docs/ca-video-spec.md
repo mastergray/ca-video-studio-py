@@ -1,7 +1,7 @@
 # CA Video Generator — Product and Technical Specification
 
 Status: Draft for implementation
-Version: 0.2
+Version: 0.3
 Date: 2026-09-26
 
 ## 1. Summary
@@ -519,24 +519,29 @@ Metadata creation can be disabled from the CLI, but is enabled by default.
 
 ## 13. Native desktop editor UX
 
+The authoritative layout and interaction design for the native editor is
+defined in [`native-ui-design.md`](native-ui-design.md). That design adapts the
+reference Web UI's canvas, Explorer, scene library, and scene editor workflows
+to native Qt without reproducing its browser/server architecture.
+
 ### 13.1 Launch and project flow
 
 Running `ca-video` or `ca-video gui [PROJECT.cav.json]` starts the PySide6 desktop editor. No server or network listener is created.
 
-The main window uses `QMainWindow` with a central preview and dockable or resizable tool areas. It has:
+The main window uses `QMainWindow` with a central preview and dockable or resizable tool areas. Its default editor mode has a layer pane on the left, the 16:9 preview and transport in the center, and a contextual inspector on the right. A preview-only mode hides editor chrome and may be made full-screen. The application has:
 
 - Project actions: New, Open, Save, Save As.
 - Native file dialogs for projects, RLE input, rendered video destinations, and still-frame destinations.
 - Output controls: resolution, fps, duration, quality, and destination.
 - A central 16:9 preview canvas.
 - Preview controls: Run/Pause, Step, Reset, jump-to-time, and preview quality.
-- A layer list with visibility, duplicate, reorder, and delete controls.
-- A property panel for the selected layer.
+- A layer list with visibility, type, selection, duplicate, reorder, and delete controls.
+- A property inspector with Layer and Project tabs and context-sensitive, collapsible sections.
 - A validation/results panel.
 - A Render button and render-job progress view.
 - Unsaved-change indication and confirmation before destructive New, Open, or Close operations.
 
-Recommended layout:
+Required layout:
 
 - Left: layer list and add, duplicate, reorder, enable, and delete actions.
 - Center: preview canvas and transport controls.
@@ -544,6 +549,22 @@ Recommended layout:
 - Bottom: validation messages, render progress, cancellation, and diagnostics.
 
 The UI must remain usable at 1280×720 and must restore sensible window geometry without reopening off-screen.
+
+The useful visual language and interaction patterns of the reference Web UI
+are retained: a dark canvas-focused workspace, restrained teal accents,
+categorized rules and palettes, contextual fields, compact statistics, and
+immediate preview feedback. The reference's separate browser pages are not
+copied literally:
+
+- Canvas becomes preview-only mode.
+- Explorer becomes the main editor workspace.
+- Scenes becomes native New/Open/Open Recent and reusable presets.
+- Scene editing becomes the project and selected-layer inspector.
+- MIDI channels become ordered automaton layers.
+
+MIDI channel numbers, event types and filters, target-channel routing,
+collisions, destroy/control events, mutation chance, generations-per-event,
+and server load actions have no native UI equivalent in version 1.
 
 ### 13.2 Preview behavior
 
@@ -792,10 +813,13 @@ Version 1 is complete when all of the following are true:
 
 ### Phase 2 — Native desktop editor
 
-- PySide6 application shell and main-window layout.
-- Project open/save and catalog-driven forms.
-- `QImage` preview surface, transport, and HUD.
-- Layer management and visual controls.
+- Three-pane PySide6 editor shell and preview-only mode as specified in
+  `docs/native-ui-design.md`.
+- Project New/Open/Save/Save As, atomic writes, recent files, and dirty-state
+  handling.
+- Catalog-driven, context-sensitive project and layer inspectors.
+- `QImage` preview surface, transport, zoom, and compact HUD.
+- Layer management, visual controls, and deterministic reset/update behavior.
 - Qt worker-based render jobs, progress, cancellation, and diagnostics.
 
 ### Phase 3 — Hardening

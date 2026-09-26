@@ -4,48 +4,71 @@ from pathlib import Path  # Represent project and render destinations
 
 import numpy as np  # Describe RGB frames displayed by the preview
 from PySide6.QtCore import Qt, QThread, QTimer  # Schedule preview and background work
-from PySide6.QtGui import QAction, QCloseEvent  # Define menu actions and close handling
-from PySide6.QtWidgets import (  # Build native window controls and dialogs
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence  # Define actions and close handling
+from PySide6.QtWidgets import (  # Build the native three-pane editor
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSplitter,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
 
-from ca_video.config.models import ConfigError, ProjectConfig, loadProject  # Load validated projects
+from ca_video.config.models import (  # Load, validate, and persist projects
+    ConfigError,
+    ProjectConfig,
+    defaultProject,
+    loadProject,
+    parseProject,
+    saveProject,
+)
 from ca_video.services.runtime import ProjectRuntime  # Drive deterministic preview frames
 from ca_video.ui.preview_widget import PreviewWidget  # Display RGB preview frames
+from ca_video.ui.property_inspector import PropertyInspector  # Edit supported project settings
 from ca_video.ui.render_worker import RenderWorker  # Export video outside the GUI thread
 
+PROJECT_FILTER = "CA Video Projects (*.cav.json);;JSON (*.json)"
 
-# Hosts the native preview, transport controls, and background render workflow
+
+# Hosts the native editor, preview controls, persistence, and render workflow
 class MainWindow(QMainWindow):
 
-    # CONSTRUCTOR :: projectConfig -> mainWindow
+    # CONSTRUCTOR :: projectConfig, path? -> mainWindow
     # Creates the primary application window for a project
-    def __init__(self, project: ProjectConfig) -> None:
+    def __init__(self, project: ProjectConfig, projectPath: Path | None = None) -> None:
         super().__init__()
         self._project = project
+        self._projectPath = projectPath.resolve() if projectPath else None
         self._runtime = ProjectRuntime(project)
         self._frameIndex = 0
+        self._dirty = False
+        self._previewOnly = False
+        self._loadingUi = False
         self._renderThread: QThread | None = None
         self._renderWorker: RenderWorker | None = None
 
-        self.setWindowTitle(f"CA Video — {project.name}")
-        self.resize(1180, 760)
+        self.resize(1280, 760)
+        self.setMinimumSize(960, 600)
         self._buildUi()
+        self._buildActions()
         self._buildMenu()
+        self._buildToolbar()
+        self._applyTheme()
 
         self._timer = QTimer(self)
         self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._advancePreview)
         self._configureTimer()
+        self._loadUiFromProject()
         self._showFrame(self._runtime.renderFrame(0))
+        self._updateTitle()
 
     #
     # Properties
@@ -56,6 +79,18 @@ class MainWindow(QMainWindow):
     @property
     def project(self) -> ProjectConfig:
         return self._project
+
+    # PROPERTY :: VOID -> path?
+    # Returns the current project file path
+    @property
+    def projectPath(self) -> Path | None:
+        return self._projectPath
+
+    # PROPERTY :: VOID -> BOOL
+    # Returns whether the project has unsaved changes
+    @property
+    def dirty(self) -> bool:
+        return self._dirty
 
     # PROPERTY :: VOID -> projectRuntime
     # Returns the active preview runtime
@@ -75,12 +110,18 @@ class MainWindow(QMainWindow):
     def preview(self) -> PreviewWidget:
         return self._preview
 
+    # PROPERTY :: VOID -> propertyInspector
+    # Returns the editor inspector for integration tests
+    @property
+    def inspector(self) -> PropertyInspector:
+        return self._inspector
+
     #
     # Instance Methods
     #
 
     # :: qCloseEvent -> NONE
-    # Cancels active background work before Qt closes the window
+    # Confirms unsaved work and cancels active background work before closing
     # NOTE: The name is fixed by the Qt override contract
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._renderWorker and self._renderThread:
@@ -99,6 +140,9 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Waiting for render worker to stop…")
                 event.ignore()
                 return
+        if not self._confirmUnsavedChanges():
+            event.ignore()
+            return
         event.accept()
 
     #
@@ -106,57 +150,208 @@ class MainWindow(QMainWindow):
     #
 
     # :: VOID -> NONE
-    # Builds the preview, controls, status, and progress layout
+    # Builds the layers, preview, inspector, and diagnostics regions
     def _buildUi(self) -> None:
         root = QWidget()
-        layout = QVBoxLayout(root)
-        layout.setContentsMargins(12, 12, 12, 12)
+        rootLayout = QVBoxLayout(root)
+        rootLayout.setContentsMargins(10, 10, 10, 6)
 
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._layerPanel = self._buildLayerPanel()
+        center = self._buildPreviewPanel()
+        self._inspector = PropertyInspector()
+        self._inspector.setMinimumWidth(320)
+        self._inspector.edited.connect(self._applyEditorData)
+        self._inspector.validationError.connect(self._showValidationError)
+        self._splitter.addWidget(self._layerPanel)
+        self._splitter.addWidget(center)
+        self._splitter.addWidget(self._inspector)
+        self._splitter.setSizes([210, 700, 330])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
+        rootLayout.addWidget(self._splitter, 1)
+
+        self._diagnostics = QLabel("✓ Project is valid")
+        self._diagnostics.setObjectName("diagnostics")
+        rootLayout.addWidget(self._diagnostics)
+        self.setCentralWidget(root)
+        self.statusBar().showMessage("Ready")
+
+    # :: VOID -> widget
+    # Builds the single-layer milestone pane
+    def _buildLayerPanel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("sidePanel")
+        panel.setMinimumWidth(180)
+        panel.setMaximumWidth(300)
+        layout = QVBoxLayout(panel)
+        title = QLabel("LAYERS")
+        title.setObjectName("panelTitle")
+        layout.addWidget(title)
+        self._layerList = QListWidget()
+        self._layerList.setObjectName("layerList")
+        self._layerList.itemChanged.connect(self._layerItemChanged)
+        layout.addWidget(self._layerList, 1)
+        addButton = QPushButton("+ Add Layer")
+        addButton.setEnabled(False)
+        addButton.setToolTip("Additional layers arrive with the composition milestone")
+        layout.addWidget(addButton)
+        duplicateButton = QPushButton("Duplicate")
+        duplicateButton.setEnabled(False)
+        duplicateButton.setToolTip("Additional layers arrive with the composition milestone")
+        layout.addWidget(duplicateButton)
+        return panel
+
+    # :: VOID -> widget
+    # Builds the central preview, transport, HUD, and render progress
+    def _buildPreviewPanel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(8, 0, 8, 0)
         self._preview = PreviewWidget()
         layout.addWidget(self._preview, 1)
 
         controls = QHBoxLayout()
-        self._playButton = QPushButton("Play")
+        self._playButton = QPushButton("▶ Play")
         self._playButton.clicked.connect(self._togglePlay)
         self._stepButton = QPushButton("Step")
         self._stepButton.clicked.connect(self._stepPreview)
         self._resetButton = QPushButton("Reset")
         self._resetButton.clicked.connect(self._resetPreview)
-        self._renderButton = QPushButton("Render MP4…")
-        self._renderButton.clicked.connect(self._chooseRenderPath)
-        self._cancelButton = QPushButton("Cancel Render")
-        self._cancelButton.setEnabled(False)
-        self._cancelButton.clicked.connect(self._cancelRender)
         for button in (self._playButton, self._stepButton, self._resetButton):
             controls.addWidget(button)
         controls.addStretch(1)
-        controls.addWidget(self._renderButton)
-        controls.addWidget(self._cancelButton)
+        self._timeLabel = QLabel()
+        controls.addWidget(self._timeLabel)
         layout.addLayout(controls)
 
         self._infoLabel = QLabel()
+        self._infoLabel.setObjectName("hud")
         self._infoLabel.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self._infoLabel)
 
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         layout.addWidget(self._progress)
-        self.setCentralWidget(root)
-        self.statusBar().showMessage("Ready")
+        return panel
 
     # :: VOID -> NONE
-    # Builds the native File menu
+    # Creates shared actions and keyboard shortcuts
+    def _buildActions(self) -> None:
+        self._newAction = QAction("&New Project", self)
+        self._newAction.setShortcut(QKeySequence.StandardKey.New)
+        self._newAction.triggered.connect(self._newProject)
+        self._openAction = QAction("&Open Project…", self)
+        self._openAction.setShortcut(QKeySequence.StandardKey.Open)
+        self._openAction.triggered.connect(self._openProject)
+        self._saveAction = QAction("&Save", self)
+        self._saveAction.setShortcut(QKeySequence.StandardKey.Save)
+        self._saveAction.triggered.connect(self._saveProject)
+        self._saveAsAction = QAction("Save &As…", self)
+        self._saveAsAction.setShortcut(QKeySequence.StandardKey.SaveAs)
+        self._saveAsAction.triggered.connect(self._saveProjectAs)
+        self._previewOnlyAction = QAction("Preview &Only", self)
+        self._previewOnlyAction.setCheckable(True)
+        self._previewOnlyAction.setShortcut("Tab")
+        self._previewOnlyAction.triggered.connect(self._togglePreviewOnly)
+        self._fullScreenAction = QAction("&Full Screen", self)
+        self._fullScreenAction.setCheckable(True)
+        self._fullScreenAction.setShortcut("F11")
+        self._fullScreenAction.triggered.connect(self._toggleFullScreen)
+        self._exitPresentationAction = QAction("Exit Presentation", self)
+        self._exitPresentationAction.setShortcut("Escape")
+        self._exitPresentationAction.triggered.connect(self._exitPresentation)
+        self._playAction = QAction("Play/Pause", self)
+        self._playAction.setShortcut("Space")
+        self._playAction.triggered.connect(self._togglePlay)
+        self._resetAction = QAction("Reset", self)
+        self._resetAction.setShortcut("Ctrl+R")
+        self._resetAction.triggered.connect(self._resetPreview)
+        self._renderAction = QAction("Render Video…", self)
+        self._renderAction.setShortcut("Ctrl+Shift+R")
+        self._renderAction.triggered.connect(self._chooseRenderPath)
+        self._cancelRenderAction = QAction("Cancel Render", self)
+        self._cancelRenderAction.setEnabled(False)
+        self._cancelRenderAction.triggered.connect(self._cancelRender)
+        self.addActions(
+            (
+                self._previewOnlyAction,
+                self._fullScreenAction,
+                self._exitPresentationAction,
+                self._playAction,
+                self._resetAction,
+            )
+        )
+
+    # :: VOID -> NONE
+    # Builds native application menus
     def _buildMenu(self) -> None:
         fileMenu = self.menuBar().addMenu("&File")
-        openAction = QAction("&Open Project…", self)
-        openAction.setShortcut("Ctrl+O")
-        openAction.triggered.connect(self._openProject)
-        fileMenu.addAction(openAction)
+        fileMenu.addActions((self._newAction, self._openAction, self._saveAction, self._saveAsAction))
         fileMenu.addSeparator()
         quitAction = QAction("&Quit", self)
-        quitAction.setShortcut("Ctrl+Q")
+        quitAction.setShortcut(QKeySequence.StandardKey.Quit)
         quitAction.triggered.connect(self.close)
         fileMenu.addAction(quitAction)
+
+        viewMenu = self.menuBar().addMenu("&View")
+        viewMenu.addActions((self._previewOnlyAction, self._fullScreenAction))
+        playbackMenu = self.menuBar().addMenu("&Playback")
+        playbackMenu.addActions((self._playAction, self._resetAction))
+        renderMenu = self.menuBar().addMenu("&Render")
+        renderMenu.addActions((self._renderAction, self._cancelRenderAction))
+
+    # :: VOID -> NONE
+    # Builds the compact primary-action toolbar
+    def _buildToolbar(self) -> None:
+        self._toolbar = QToolBar("Main", self)
+        self._toolbar.setMovable(False)
+        self._toolbar.addActions((self._newAction, self._openAction, self._saveAction))
+        self._toolbar.addSeparator()
+        self._toolbar.addAction(self._previewOnlyAction)
+        self._toolbar.addSeparator()
+        self._toolbar.addAction(self._renderAction)
+        self.addToolBar(self._toolbar)
+
+    # :: VOID -> NONE
+    # Applies the reference-inspired dark native visual language
+    def _applyTheme(self) -> None:
+        self.setStyleSheet(
+            "QMainWindow, QWidget { background: #0e1214; color: #ccd6d8; }"
+            "QMenuBar, QMenu, QToolBar, QStatusBar { background: #141819; color: #ccd6d8; }"
+            "QToolBar { border-bottom: 1px solid #263032; spacing: 5px; padding: 4px; }"
+            "QPushButton, QToolButton { background: #1e2526; border: 1px solid #303a3c; "
+            "border-radius: 4px; padding: 5px 10px; }"
+            "QPushButton:hover, QToolButton:hover { border-color: #3ac5c9; }"
+            "QPushButton:disabled { color: #536164; }"
+            "QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QListWidget { "
+            "background: #181d1e; border: 1px solid #303a3c; border-radius: 3px; padding: 4px; }"
+            "QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, "
+            "QPlainTextEdit:focus { border-color: #3ac5c9; }"
+            "QTabWidget::pane, QGroupBox { border: 1px solid #263032; }"
+            "QTabBar::tab { background: #181d1e; padding: 7px 14px; }"
+            "QTabBar::tab:selected { color: #3ac5c9; border-bottom: 2px solid #3ac5c9; }"
+            "QGroupBox { margin-top: 10px; padding-top: 8px; font-weight: 600; }"
+            "QGroupBox::title { color: #3ac5c9; subcontrol-origin: margin; left: 8px; }"
+            "QLabel#panelTitle { color: #3ac5c9; font-weight: 700; letter-spacing: 2px; }"
+            "QLabel#hud, QLabel#diagnostics { color: #839194; padding: 4px; }"
+            "QListWidget::item:selected { background: #214247; color: #e6f0f0; }"
+            "QSplitter::handle { background: #263032; width: 1px; }"
+        )
+
+    # :: VOID -> NONE
+    # Loads the active model into layer and inspector widgets
+    def _loadUiFromProject(self) -> None:
+        self._loadingUi = True
+        self._layerList.clear()
+        item = QListWidgetItem(f"{self._project.layer.name}    2D")
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if self._project.layer.enabled else Qt.CheckState.Unchecked)
+        self._layerList.addItem(item)
+        self._layerList.setCurrentItem(item)
+        self._inspector.setProject(self._project)
+        self._loadingUi = False
 
     # :: VOID -> NONE
     # Synchronizes preview timing with project fps
@@ -169,31 +364,37 @@ class MainWindow(QMainWindow):
         self._preview.setFrame(frame)
         engine = self._runtime.engine
         density = engine.liveCount / engine.grid.size * 100
+        duration = self._project.output.durationSeconds
+        currentSeconds = self._frameIndex / self._project.output.fps
+        self._timeLabel.setText(f"{currentSeconds:06.2f} / {duration:06.2f} s")
         self._infoLabel.setText(
-            f"Frame {self._frameIndex}/{self._project.output.totalFrames - 1}  ·  "
-            f"Generation {engine.generation}  ·  {engine.liveCount:,} live cells  ·  "
-            f"{density:.1f}%  ·  {self._project.output.width}×{self._project.output.height} @ "
-            f"{self._project.output.fps} fps"
+            f"Gen {engine.generation}  ·  {engine.liveCount:,} live  ·  {density:.1f}%  ·  "
+            f"{self._project.layer.gridWidth}×{self._project.layer.gridHeight}  ·  "
+            f"{self._project.layer.rule.notation}"
         )
 
     # :: VOID -> NONE
     # Starts or pauses preview playback
     def _togglePlay(self) -> None:
         if self._timer.isActive():
-            self._timer.stop()
-            self._playButton.setText("Play")
+            self._pausePreview()
         else:
             if self._frameIndex >= self._project.output.totalFrames - 1:
                 self._resetPreview()
             self._timer.start()
-            self._playButton.setText("Pause")
+            self._playButton.setText("❚❚ Pause")
+
+    # :: VOID -> NONE
+    # Pauses preview playback and normalizes transport labels
+    def _pausePreview(self) -> None:
+        self._timer.stop()
+        self._playButton.setText("▶ Play")
 
     # :: VOID -> NONE
     # Advances preview playback by one output frame
     def _advancePreview(self) -> None:
         if self._frameIndex >= self._project.output.totalFrames - 1:
-            self._timer.stop()
-            self._playButton.setText("Play")
+            self._pausePreview()
             return
         self._frameIndex += 1
         self._showFrame(self._runtime.renderFrame(self._frameIndex))
@@ -201,8 +402,7 @@ class MainWindow(QMainWindow):
     # :: VOID -> NONE
     # Advances the preview by exactly one automaton generation
     def _stepPreview(self) -> None:
-        self._timer.stop()
-        self._playButton.setText("Play")
+        self._pausePreview()
         frame = self._runtime.stepOnce()
         self._frameIndex = self._runtime.currentFrameIndex
         self._showFrame(frame)
@@ -210,21 +410,87 @@ class MainWindow(QMainWindow):
     # :: VOID -> NONE
     # Restores the deterministic initial preview frame
     def _resetPreview(self) -> None:
-        self._timer.stop()
-        self._playButton.setText("Play")
+        self._pausePreview()
         self._runtime.reset()
         self._frameIndex = 0
         self._showFrame(self._runtime.renderFrame(0))
 
+    # :: object, BOOL -> NONE
+    # Validates inspector edits and updates the shared runtime
+    def _applyEditorData(self, data: object, resetSimulation: bool) -> None:
+        try:
+            if not isinstance(data, dict):
+                raise ConfigError("editor produced an invalid project mapping")
+            project = parseProject(data, self._project.baseDir)
+        except ConfigError as error:
+            self._showValidationError(str(error))
+            return
+        self._pausePreview()
+        try:
+            if resetSimulation:
+                runtime = ProjectRuntime(project)
+                frame = runtime.renderFrame(0)
+            else:
+                runtime = self._runtime
+                frame = runtime.updateProject(project, False)
+        except ValueError as error:
+            self._showValidationError(str(error))
+            return
+        self._runtime = runtime
+        self._project = project
+        self._frameIndex = self._runtime.currentFrameIndex
+        if resetSimulation:
+            self._frameIndex = 0
+            self.statusBar().showMessage("Simulation reset after settings change", 3000)
+        self._setDirty(True)
+        self._diagnostics.setText("✓ Project is valid")
+        self._diagnostics.setStyleSheet("color: #7abf6e;")
+        self._configureTimer()
+        self._refreshLayerItem()
+        self._showFrame(frame)
+
+    # :: STRING -> NONE
+    # Displays non-blocking editor validation feedback
+    def _showValidationError(self, message: str) -> None:
+        self._diagnostics.setText(f"⚠ {message}")
+        self._diagnostics.setStyleSheet("color: #d98585;")
+        self.statusBar().showMessage("Project settings need attention", 3000)
+
+    # :: listWidgetItem -> NONE
+    # Applies the layer row's enabled state
+    def _layerItemChanged(self, item: QListWidgetItem) -> None:
+        if self._loadingUi:
+            return
+        data = self._project.toDict()
+        data["layers"][0]["enabled"] = item.checkState() == Qt.CheckState.Checked
+        self._applyEditorData(data, True)
+        self._inspector.setProject(self._project)
+
+    # :: VOID -> NONE
+    # Refreshes the visible single-layer row after inspector edits
+    def _refreshLayerItem(self) -> None:
+        item = self._layerList.item(0)
+        if item is None:
+            return
+        self._loadingUi = True
+        item.setText(f"{self._project.layer.name}    2D")
+        item.setCheckState(Qt.CheckState.Checked if self._project.layer.enabled else Qt.CheckState.Unchecked)
+        self._loadingUi = False
+
+    # :: VOID -> NONE
+    # Starts a clean default project after confirming unsaved changes
+    def _newProject(self) -> None:
+        if not self._confirmUnsavedChanges():
+            return
+        self._adoptProject(defaultProject(), None, False)
+        self.statusBar().showMessage("Created a new project", 3000)
+
     # :: VOID -> NONE
     # Prompts for and loads a project file
     def _openProject(self) -> None:
-        selected, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open CA Video Project",
-            "",
-            "CA Video Projects (*.cav.json);;JSON (*.json)",
-        )
+        if not self._confirmUnsavedChanges():
+            return
+        selected, _ = QFileDialog.getOpenFileName(self, "Open CA Video Project", "", PROJECT_FILTER)
         if not selected:
             return
         try:
@@ -232,25 +498,120 @@ class MainWindow(QMainWindow):
         except ConfigError as error:
             QMessageBox.critical(self, "Invalid Project", str(error))
             return
-        self._timer.stop()
+        self._adoptProject(project, Path(selected), False)
+        self.statusBar().showMessage(f"Opened {selected}", 5000)
+
+    # :: VOID -> BOOL
+    # Saves to the current path or delegates to Save As
+    def _saveProject(self) -> bool:
+        if self._projectPath is None:
+            return self._saveProjectAs()
+        try:
+            self._project = saveProject(self._project, self._projectPath)
+        except ConfigError as error:
+            QMessageBox.critical(self, "Save Failed", str(error))
+            return False
+        self._runtime.updateProject(self._project, False)
+        self._inspector.setProject(self._project)
+        self._setDirty(False)
+        self.statusBar().showMessage(f"Saved {self._projectPath}", 5000)
+        return True
+
+    # :: VOID -> BOOL
+    # Prompts for a project destination and saves atomically
+    def _saveProjectAs(self) -> bool:
+        suggested = str(self._projectPath or (self._project.baseDir / "untitled.cav.json"))
+        selected, _ = QFileDialog.getSaveFileName(self, "Save CA Video Project", suggested, PROJECT_FILTER)
+        if not selected:
+            return False
+        path = Path(selected)
+        if not str(path).lower().endswith(".cav.json"):
+            path = path.with_suffix(".cav.json")
+        self._projectPath = path.resolve()
+        return self._saveProject()
+
+    # :: VOID -> BOOL
+    # Offers Save, Discard, or Cancel when the project is dirty
+    def _confirmUnsavedChanges(self) -> bool:
+        if not self._dirty:
+            return True
+        response = QMessageBox.warning(
+            self,
+            "Unsaved Changes",
+            "Save changes to this project?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if response == QMessageBox.StandardButton.Cancel:
+            return False
+        if response == QMessageBox.StandardButton.Save:
+            return self._saveProject()
+        return True
+
+    # :: projectConfig, path?, BOOL -> NONE
+    # Replaces the active project and refreshes every editor region
+    def _adoptProject(self, project: ProjectConfig, path: Path | None, dirty: bool) -> None:
+        self._pausePreview()
         self._project = project
+        self._projectPath = path.resolve() if path else None
         self._runtime = ProjectRuntime(project)
         self._frameIndex = 0
         self._configureTimer()
-        self.setWindowTitle(f"CA Video — {project.name}")
+        self._loadUiFromProject()
         self._showFrame(self._runtime.renderFrame(0))
-        self.statusBar().showMessage(f"Opened {selected}", 5000)
+        self._diagnostics.setText("✓ Project is valid")
+        self._diagnostics.setStyleSheet("color: #7abf6e;")
+        self._setDirty(dirty)
+
+    # :: BOOL -> NONE
+    # Updates dirty state and its title-bar indicator
+    def _setDirty(self, dirty: bool) -> None:
+        self._dirty = dirty
+        self._updateTitle()
+
+    # :: VOID -> NONE
+    # Updates the desktop window title from project state
+    def _updateTitle(self) -> None:
+        marker = " *" if self._dirty else ""
+        self.setWindowTitle(f"CA Video — {self._project.name}{marker}")
+
+    # :: VOID -> NONE
+    # Enters or exits the distraction-free preview workspace
+    def _togglePreviewOnly(self) -> None:
+        self._previewOnly = self._previewOnlyAction.isChecked()
+        visible = not self._previewOnly
+        self._layerPanel.setVisible(visible)
+        self._inspector.setVisible(visible)
+        self._diagnostics.setVisible(visible)
+        self._toolbar.setVisible(visible)
+        self.menuBar().setVisible(visible)
+
+    # :: VOID -> NONE
+    # Toggles native full-screen presentation
+    def _toggleFullScreen(self) -> None:
+        if self._fullScreenAction.isChecked():
+            self.showFullScreen()
+        else:
+            self.showNormal()
+
+    # :: VOID -> NONE
+    # Leaves full-screen or preview-only presentation state
+    def _exitPresentation(self) -> None:
+        if self._fullScreenAction.isChecked():
+            self._fullScreenAction.setChecked(False)
+            self.showNormal()
+            return
+        if self._previewOnly:
+            self._previewOnlyAction.setChecked(False)
+            self._togglePreviewOnly()
 
     # :: VOID -> NONE
     # Prompts for an MP4 destination and confirms replacement
     def _chooseRenderPath(self) -> None:
         suggested = str(self._project.outputPath())
-        selected, _ = QFileDialog.getSaveFileName(
-            self,
-            "Render MP4",
-            suggested,
-            "MP4 Video (*.mp4)",
-        )
+        selected, _ = QFileDialog.getSaveFileName(self, "Render MP4", suggested, "MP4 Video (*.mp4)")
         if not selected:
             return
         destination = Path(selected)
@@ -270,12 +631,12 @@ class MainWindow(QMainWindow):
         self._startRender(destination, overwrite)
 
     # :: path, BOOL -> NONE
-    # Starts a background render job
+    # Starts a background render job from an immutable project snapshot
     def _startRender(self, destination: Path, overwrite: bool) -> None:
         if self._renderThread is not None:
             return
-        self._renderButton.setEnabled(False)
-        self._cancelButton.setEnabled(True)
+        self._renderAction.setEnabled(False)
+        self._cancelRenderAction.setEnabled(True)
         self._progress.setRange(0, self._project.output.totalFrames)
         self._progress.setValue(0)
         self._progress.setVisible(True)
@@ -306,7 +667,7 @@ class MainWindow(QMainWindow):
     def _cancelRender(self) -> None:
         if self._renderWorker:
             self._renderWorker.requestCancel()
-            self._cancelButton.setEnabled(False)
+            self._cancelRenderAction.setEnabled(False)
             self.statusBar().showMessage("Cancelling render…")
 
     # :: STRING -> NONE
@@ -331,5 +692,5 @@ class MainWindow(QMainWindow):
     def _renderThreadFinished(self) -> None:
         self._renderThread = None
         self._renderWorker = None
-        self._renderButton.setEnabled(True)
-        self._cancelButton.setEnabled(False)
+        self._renderAction.setEnabled(True)
+        self._cancelRenderAction.setEnabled(False)

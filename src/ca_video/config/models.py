@@ -1,12 +1,18 @@
 from __future__ import annotations  # Enable forward references in type annotations
 
-import json  # Parse persisted project files
+import json  # Parse and serialize persisted project files
 import math  # Validate finite numeric settings and derive grid dimensions
+import os  # Atomically replace completed project files
 import re  # Validate color and identifier formats
+import tempfile  # Create same-directory temporary project files
 from collections.abc import Mapping  # Describe unvalidated JSON objects
 from decimal import Decimal, InvalidOperation  # Calculate exact output frame counts
 from pathlib import Path  # Represent project and output paths
 from typing import Any  # Describe values before schema validation
+
+from ca_video.catalogs.rules_2d import getRule  # Resolve named 2D rule presets
+from ca_video.simulation.initialization import parseRle  # Validate inline RLE patterns
+from ca_video.simulation.rules import OuterTotalisticRule, parseRule  # Validate B/S/C rules
 
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 LAYER_ID = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
@@ -21,6 +27,7 @@ ENCODER_PRESETS = {
     "slower",
     "veryslow",
 }
+INITIAL_TYPES = {"random", "center_block", "disc", "cells", "rle", "catalog_default"}
 
 
 # Indicates that a project configuration is invalid or unsupported
@@ -189,10 +196,88 @@ class OutputConfig:
         )
 
 
+# Stores validated settings for a two-dimensional initializer
+class Initial2DConfig:
+
+    # CONSTRUCTOR :: STRING, FLOAT, INT, (INT, INT)?, ((INT, INT)), STRING, STRING?, path? -> initial2DConfig
+    # Creates immutable-by-convention initializer settings
+    def __init__(
+        self,
+        type: str,
+        density: float = 1,
+        radius: int = 2,
+        size: tuple[int, int] | None = None,
+        cells: tuple[tuple[int, int], ...] = (),
+        origin: str = "center",
+        rleData: str | None = None,
+        rlePath: Path | None = None,
+    ) -> None:
+        self._type = type
+        self._density = density
+        self._radius = radius
+        self._size = size
+        self._cells = cells
+        self._origin = origin
+        self._rleData = rleData
+        self._rlePath = rlePath
+
+    #
+    # Properties
+    #
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the initializer type
+    @property
+    def type(self) -> str:
+        return self._type
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the fill density used by geometric initializers
+    @property
+    def density(self) -> float:
+        return self._density
+
+    # PROPERTY :: VOID -> INT
+    # Returns the shape radius
+    @property
+    def radius(self) -> int:
+        return self._radius
+
+    # PROPERTY :: VOID -> (INT, INT)?
+    # Returns an explicit block size when configured
+    @property
+    def size(self) -> tuple[int, int] | None:
+        return self._size
+
+    # PROPERTY :: VOID -> ((INT, INT))
+    # Returns explicit initial cell coordinates
+    @property
+    def cells(self) -> tuple[tuple[int, int], ...]:
+        return self._cells
+
+    # PROPERTY :: VOID -> STRING
+    # Returns whether explicit coordinates are absolute or centered
+    @property
+    def origin(self) -> str:
+        return self._origin
+
+    # PROPERTY :: VOID -> STRING?
+    # Returns inline RLE data
+    @property
+    def rleData(self) -> str | None:
+        return self._rleData
+
+    # PROPERTY :: VOID -> path?
+    # Returns a project-relative RLE path
+    @property
+    def rlePath(self) -> Path | None:
+        return self._rlePath
+
+
 # Stores validated settings for the milestone's single 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig? -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -208,6 +293,9 @@ class Layer2DConfig:
         initialDensity: float,
         liveColor: tuple[int, int, int],
         layout: str,
+        rule: OuterTotalisticRule | None = None,
+        rulePreset: str | None = "life",
+        initial: Initial2DConfig | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -221,6 +309,9 @@ class Layer2DConfig:
         self._initialDensity = initialDensity
         self._liveColor = liveColor
         self._layout = layout
+        self._rule = rule or parseRule("B3/S23")
+        self._rulePreset = rulePreset
+        self._initial = initial or Initial2DConfig("random", initialDensity)
 
     #
     # Properties
@@ -297,6 +388,24 @@ class Layer2DConfig:
     @property
     def layout(self) -> str:
         return self._layout
+
+    # PROPERTY :: VOID -> outerTotalisticRule
+    # Returns the parsed simulation rule
+    @property
+    def rule(self) -> OuterTotalisticRule:
+        return self._rule
+
+    # PROPERTY :: VOID -> STRING?
+    # Returns the catalog key or None for a custom rule
+    @property
+    def rulePreset(self) -> str | None:
+        return self._rulePreset
+
+    # PROPERTY :: VOID -> initial2DConfig
+    # Returns initial-condition settings
+    @property
+    def initial(self) -> Initial2DConfig:
+        return self._initial
 
 
 # Stores a fully validated project configuration
@@ -391,10 +500,79 @@ class ProjectConfig:
             self._baseDir,
         )
 
+    # :: VOID -> ARRAY<STRING, ANY>
+    # Serializes the normalized project schema
+    def toDict(self) -> dict[str, Any]:
+        initial = self._layer.initial
+        initialData: dict[str, Any] = {"type": initial.type}
+        if initial.type in {"random", "center_block", "disc"}:
+            initialData["density"] = initial.density
+        if initial.type in {"center_block", "disc"}:
+            if initial.size is not None and initial.type == "center_block":
+                initialData["size"] = list(initial.size)
+            else:
+                initialData["radius"] = initial.radius
+        if initial.type == "cells":
+            initialData["origin"] = initial.origin
+            initialData["cells"] = [list(cell) for cell in initial.cells]
+        if initial.type == "rle":
+            initialData["origin"] = initial.origin
+            if initial.rleData is not None:
+                initialData["data"] = initial.rleData
+            elif initial.rlePath is not None:
+                initialData["path"] = str(initial.rlePath)
+
+        ruleData = (
+            {"preset": self._layer.rulePreset}
+            if self._layer.rulePreset is not None
+            else {"notation": self._layer.rule.notation, "neighborhood": self._layer.rule.neighborhood}
+        )
+        return {
+            "schema_version": self._schemaVersion,
+            "project": {"name": self._name, "seed": self._seed},
+            "output": {
+                "path": str(self._output.path),
+                "width": self._output.width,
+                "height": self._output.height,
+                "fps": self._output.fps,
+                "duration_seconds": self._output.durationSeconds,
+                "codec": "h264",
+                "crf": self._output.crf,
+                "encoder_preset": self._output.encoderPreset,
+            },
+            "canvas": {"background": colorToHex(self._canvasBackground)},
+            "layers": [
+                {
+                    "id": self._layer.id,
+                    "name": self._layer.name,
+                    "enabled": self._layer.enabled,
+                    "dimension": "2d",
+                    "z_index": self._layer.zIndex,
+                    "opacity": self._layer.opacity,
+                    "step_interval_ms": self._layer.stepIntervalMs,
+                    "simulation": {
+                        "mode": "outer_totalistic",
+                        "grid": {
+                            "size": [self._layer.gridWidth, self._layer.gridHeight],
+                            "boundary": self._layer.boundary,
+                        },
+                        "rule": ruleData,
+                        "initial": initialData,
+                    },
+                    "render": {
+                        "style": "cells",
+                        "color": colorToHex(self._layer.liveColor),
+                        "layout": self._layer.layout,
+                    },
+                }
+            ],
+        }
+
 
 # :: ARRAY<STRING, ANY>, path? -> projectConfig
 # Parses and validates a project mapping
 def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> ProjectConfig:
+    resolvedBaseDir = baseDir or Path.cwd()
     root = _asMapping(data, "project")
     _rejectUnknown(root, {"schema_version", "project", "output", "canvas", "layers"}, "project")
     schemaVersion = _asInteger(root.get("schema_version"), "schema_version", 1, 1)
@@ -460,21 +638,39 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         raise ConfigError("the current milestone supports only a 2d layer")
     zIndex = _asInteger(layerData.get("z_index", 0), "layers[0].z_index", -10_000, 10_000)
     opacity = _asNumber(layerData.get("opacity", 1), "layers[0].opacity", 0, 1)
-    stepIntervalMs = _asInteger(
-        layerData.get("step_interval_ms", 100),
-        "layers[0].step_interval_ms",
-        1,
-        60_000,
-    )
+    stepIntervalMs = _asInteger(layerData.get("step_interval_ms", 100), "layers[0].step_interval_ms", 1, 60_000)
 
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
     _rejectUnknown(simulation, {"mode", "grid", "rule", "initial"}, "layers[0].simulation")
     if simulation.get("mode") != "outer_totalistic":
         raise ConfigError("the current milestone supports only outer_totalistic simulation")
-    rule = _asMapping(simulation.get("rule"), "layers[0].simulation.rule")
-    _rejectUnknown(rule, {"preset"}, "layers[0].simulation.rule")
-    if rule.get("preset") != "life":
-        raise ConfigError("the current milestone supports only the life rule preset")
+    ruleData = _asMapping(simulation.get("rule"), "layers[0].simulation.rule")
+    _rejectUnknown(ruleData, {"preset", "notation", "neighborhood"}, "layers[0].simulation.rule")
+    hasPreset = "preset" in ruleData
+    hasNotation = "notation" in ruleData or "neighborhood" in ruleData
+    if hasPreset == hasNotation:
+        raise ConfigError("layers[0].simulation.rule must use either preset or notation with neighborhood")
+    if hasPreset:
+        preset = ruleData.get("preset")
+        if not isinstance(preset, str):
+            raise ConfigError("layers[0].simulation.rule.preset must be a string")
+        try:
+            catalogRule = getRule(preset)
+            parsedRule = parseRule(catalogRule.notation, "moore")
+        except (KeyError, ValueError) as error:
+            raise ConfigError(str(error)) from error
+        rulePreset: str | None = preset
+    else:
+        notation = ruleData.get("notation")
+        neighborhood = ruleData.get("neighborhood")
+        if not isinstance(notation, str) or not isinstance(neighborhood, str):
+            raise ConfigError("custom rules require string notation and neighborhood")
+        try:
+            parsedRule = parseRule(notation, neighborhood)
+        except ValueError as error:
+            raise ConfigError(f"layers[0].simulation.rule: {error}") from error
+        rulePreset = None
+
     grid = _asMapping(simulation.get("grid"), "layers[0].simulation.grid")
     _rejectUnknown(grid, {"size", "cell_size_px", "boundary"}, "layers[0].simulation.grid")
     boundary = grid.get("boundary", "wrap")
@@ -483,26 +679,92 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     if "size" in grid and "cell_size_px" in grid:
         raise ConfigError("grid must use either size or cell_size_px, not both")
     if "size" in grid:
-        size = grid["size"]
-        if not isinstance(size, list) or len(size) != 2:
+        sizeValue = grid["size"]
+        if not isinstance(sizeValue, list) or len(sizeValue) != 2:
             raise ConfigError("layers[0].simulation.grid.size must contain [width, height]")
-        gridWidth = _asInteger(size[0], "layers[0].simulation.grid.size[0]", 8, 2048)
-        gridHeight = _asInteger(size[1], "layers[0].simulation.grid.size[1]", 8, 2048)
+        gridWidth = _asInteger(sizeValue[0], "layers[0].simulation.grid.size[0]", 8, 2048)
+        gridHeight = _asInteger(sizeValue[1], "layers[0].simulation.grid.size[1]", 8, 2048)
     else:
-        cellSize = _asInteger(
-            grid.get("cell_size_px", 4),
-            "layers[0].simulation.grid.cell_size_px",
-            1,
-            128,
-        )
+        cellSize = _asInteger(grid.get("cell_size_px", 4), "layers[0].simulation.grid.cell_size_px", 1, 128)
         gridWidth = math.ceil(width / cellSize)
         gridHeight = math.ceil(height / cellSize)
 
-    initial = _asMapping(simulation.get("initial"), "layers[0].simulation.initial")
-    _rejectUnknown(initial, {"type", "density"}, "layers[0].simulation.initial")
-    if initial.get("type") != "random":
-        raise ConfigError("the current milestone supports only random initialization")
-    density = _asNumber(initial.get("density", 0.3), "layers[0].simulation.initial.density", 0, 1)
+    initialData = _asMapping(simulation.get("initial"), "layers[0].simulation.initial")
+    _rejectUnknown(initialData, {"type", "density", "radius", "size", "cells", "origin", "data", "path"}, "layers[0].simulation.initial")
+    initialType = initialData.get("type")
+    if initialType not in INITIAL_TYPES:
+        choices = ", ".join(sorted(INITIAL_TYPES))
+        raise ConfigError(f"layers[0].simulation.initial.type must be one of {choices}")
+    if initialType == "catalog_default":
+        if rulePreset is None:
+            raise ConfigError("catalog_default initialization requires a rule preset")
+        initialType = getRule(rulePreset).recommendedInitial
+    density = _asNumber(initialData.get("density", 1), "layers[0].simulation.initial.density", 0, 1)
+    radius = _asInteger(initialData.get("radius", 2), "layers[0].simulation.initial.radius", 1, 2048)
+    shapeSize: tuple[int, int] | None = None
+    if "size" in initialData:
+        shapeSizeValue = initialData["size"]
+        if not isinstance(shapeSizeValue, list) or len(shapeSizeValue) != 2:
+            raise ConfigError("layers[0].simulation.initial.size must contain [width, height]")
+        shapeSize = (
+            _asInteger(shapeSizeValue[0], "layers[0].simulation.initial.size[0]", 1, gridWidth),
+            _asInteger(shapeSizeValue[1], "layers[0].simulation.initial.size[1]", 1, gridHeight),
+        )
+    if initialType in {"center_block", "disc"} and shapeSize is None:
+        diameter = radius * 2 + 1
+        if diameter > gridWidth or diameter > gridHeight:
+            raise ConfigError("initial radius is too large for the configured grid")
+    origin = initialData.get("origin", "center")
+    if origin not in {"center", "absolute"}:
+        raise ConfigError("layers[0].simulation.initial.origin must be center or absolute")
+    cells: tuple[tuple[int, int], ...] = ()
+    if initialType == "cells":
+        cellValues = initialData.get("cells", [])
+        if not isinstance(cellValues, list):
+            raise ConfigError("layers[0].simulation.initial.cells must be a list")
+        parsedCells: list[tuple[int, int]] = []
+        for index, cell in enumerate(cellValues):
+            if not isinstance(cell, list) or len(cell) != 2:
+                raise ConfigError(f"layers[0].simulation.initial.cells[{index}] must contain [x, y]")
+            xValue = _asInteger(cell[0], f"layers[0].simulation.initial.cells[{index}][0]", -2048, 2048)
+            yValue = _asInteger(cell[1], f"layers[0].simulation.initial.cells[{index}][1]", -2048, 2048)
+            if boundary == "fixed":
+                offsetX = gridWidth // 2 if origin == "center" else 0
+                offsetY = gridHeight // 2 if origin == "center" else 0
+                if not (0 <= xValue + offsetX < gridWidth and 0 <= yValue + offsetY < gridHeight):
+                    raise ConfigError(f"layers[0].simulation.initial.cells[{index}] is outside the fixed grid")
+            parsedCells.append((xValue, yValue))
+        cells = tuple(parsedCells)
+    rleData = initialData.get("data")
+    rlePathValue = initialData.get("path")
+    rlePath: Path | None = None
+    if initialType == "rle":
+        if (rleData is None) == (rlePathValue is None):
+            raise ConfigError("RLE initialization requires exactly one of data or path")
+        if rleData is not None:
+            if not isinstance(rleData, str):
+                raise ConfigError("layers[0].simulation.initial.data must be a string")
+            try:
+                pattern = parseRle(rleData)
+            except ValueError as error:
+                raise ConfigError(f"layers[0].simulation.initial.data: {error}") from error
+            if boundary == "fixed" and (pattern.shape[1] > gridWidth or pattern.shape[0] > gridHeight):
+                raise ConfigError("RLE pattern is larger than the fixed grid")
+        if rlePathValue is not None:
+            if not isinstance(rlePathValue, str) or not rlePathValue.strip():
+                raise ConfigError("layers[0].simulation.initial.path must be a non-empty string")
+            rlePath = Path(rlePathValue)
+            source = rlePath if rlePath.is_absolute() else resolvedBaseDir / rlePath
+            try:
+                pattern = parseRle(source.read_text(encoding="utf-8"))
+            except OSError as error:
+                raise ConfigError(f"could not read RLE file {source}: {error}") from error
+            except ValueError as error:
+                raise ConfigError(f"layers[0].simulation.initial.path: {error}") from error
+            if boundary == "fixed" and (pattern.shape[1] > gridWidth or pattern.shape[0] > gridHeight):
+                raise ConfigError("RLE pattern is larger than the fixed grid")
+
+    initial = Initial2DConfig(initialType, density, radius, shapeSize, cells, origin, rleData, rlePath)
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
     _rejectUnknown(render, {"style", "color", "layout"}, "layers[0].render")
@@ -515,7 +777,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
 
     layer = Layer2DConfig(
         layerId,
-        layerName,
+        layerName.strip(),
         enabled,
         zIndex,
         opacity,
@@ -526,16 +788,11 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         density,
         liveColor,
         layout,
+        parsedRule,
+        rulePreset,
+        initial,
     )
-    return ProjectConfig(
-        schemaVersion,
-        name.strip(),
-        seed,
-        output,
-        background,
-        layer,
-        baseDir or Path.cwd(),
-    )
+    return ProjectConfig(schemaVersion, name.strip(), seed, output, background, layer, resolvedBaseDir)
 
 
 # :: STRING|path -> projectConfig
@@ -550,8 +807,37 @@ def loadProject(path: str | Path) -> ProjectConfig:
     return parseProject(data, projectPath.parent)
 
 
+# :: projectConfig, STRING|path -> projectConfig
+# Atomically writes a normalized project and returns its rebased model
+def saveProject(project: ProjectConfig, path: str | Path) -> ProjectConfig:
+    projectPath = Path(path).expanduser().resolve()
+    projectPath.parent.mkdir(parents=True, exist_ok=True)
+    rebased = parseProject(project.toDict(), projectPath.parent)
+    temporaryPath: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=projectPath.parent,
+            prefix=f".{projectPath.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporaryPath = Path(handle.name)
+            json.dump(rebased.toDict(), handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporaryPath, projectPath)
+    except OSError as error:
+        if temporaryPath is not None:
+            temporaryPath.unlink(missing_ok=True)
+        raise ConfigError(f"could not save project {projectPath}: {error}") from error
+    return rebased
+
+
 # :: path? -> projectConfig
-# Creates the default milestone project
+# Creates the default editable two-dimensional project
 def defaultProject(baseDir: Path | None = None) -> ProjectConfig:
     return parseProject(
         {

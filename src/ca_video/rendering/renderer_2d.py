@@ -9,7 +9,7 @@ RGBFrame = NDArray[np.uint8]
 # Converts a two-dimensional cell grid into an exact-size RGB frame
 class Renderer2D:
 
-    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING -> renderer2D
+    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING, INT -> renderer2D
     # Creates a nearest-neighbor 2D renderer
     def __init__(
         self,
@@ -19,6 +19,7 @@ class Renderer2D:
         liveColor: tuple[int, int, int],
         opacity: float = 1.0,
         layout: str = "fit",
+        states: int = 2,
     ) -> None:
         self._width = width
         self._height = height
@@ -26,6 +27,7 @@ class Renderer2D:
         self._liveColor = np.asarray(liveColor, dtype=np.float32)
         self._opacity = opacity
         self._layout = layout
+        self._states = states
 
     #
     # Instance Methods
@@ -41,12 +43,17 @@ class Renderer2D:
             scale = min(self._width / gridWidth, self._height / gridHeight)
         renderWidth = max(1, int(round(gridWidth * scale)))
         renderHeight = max(1, int(round(gridHeight * scale)))
-        mask = self._resizeNearest(grid, renderWidth, renderHeight).astype(bool)
+        resized = self._resizeNearest(grid, renderWidth, renderHeight)
 
         layer = np.empty((renderHeight, renderWidth, 3), dtype=np.float32)
         layer[:] = self._background
-        blendedLive = self._background * (1.0 - self._opacity) + self._liveColor * self._opacity
-        layer[mask] = blendedLive
+        intensity = np.zeros(resized.shape, dtype=np.float32)
+        intensity[resized == 1] = 1.0
+        if self._states > 2:
+            decaying = resized >= 2
+            intensity[decaying] = (self._states - resized[decaying]) / (self._states - 1)
+        alpha = intensity[..., None] * self._opacity
+        layer = self._background * (1.0 - alpha) + self._liveColor * alpha
 
         if self._layout == "cover":
             offsetX = max(0, (renderWidth - self._width) // 2)

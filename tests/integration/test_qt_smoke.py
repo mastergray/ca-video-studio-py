@@ -30,3 +30,44 @@ def test_preview_transport_uses_shared_runtime() -> None:
     assert window.frameIndex == 0
     assert window.runtime.engine.generation == 0
     window.close()
+
+
+def test_editor_changes_custom_rule_and_saves_project(tmp_path) -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject(tmp_path))
+    inspector = window.inspector
+    customIndex = inspector._rulePreset.findData("custom")
+    inspector._rulePreset.setCurrentIndex(customIndex)
+    inspector._customNotation.setText("B2/S/C3")
+    inspector._customNotation.editingFinished.emit()
+    inspector._projectName.setText("Edited Brain")
+    inspector._projectName.editingFinished.emit()
+    app.processEvents()
+
+    assert window.project.layer.rule.notation == "B2/S/C3"
+    assert window.project.name == "Edited Brain"
+    assert window.dirty
+
+    destination = tmp_path / "edited.cav.json"
+    window._projectPath = destination
+    assert window._saveProject()
+    assert destination.exists()
+    assert not window.dirty
+    window.close()
+
+
+def test_preview_only_mode_restores_editor_panes() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    window.show()
+    window._previewOnlyAction.setChecked(True)
+    window._togglePreviewOnly()
+    app.processEvents()
+    assert not window._layerPanel.isVisible()
+    assert not window.inspector.isVisible()
+
+    window._exitPresentation()
+    app.processEvents()
+    assert window._layerPanel.isVisible()
+    assert window.inspector.isVisible()
+    window.close()

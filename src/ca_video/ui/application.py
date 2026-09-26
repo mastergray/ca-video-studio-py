@@ -17,6 +17,7 @@ def runGui(projectPath: str | Path | None = None) -> int:
     QCoreApplication.setOrganizationName("CA Video")
     QCoreApplication.setApplicationName("CA Video Generator")
     project = loadProject(projectPath) if projectPath else defaultProject()
-    window = MainWindow(project)
+    resolvedPath = Path(projectPath).expanduser().resolve() if projectPath else None
+    window = MainWindow(project, resolvedPath)
     window.show()
     return app.exec()

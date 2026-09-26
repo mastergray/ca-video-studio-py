@@ -2,7 +2,12 @@
 
 Native Python/PySide6 application for previewing and exporting deterministic cellular-automata videos.
 
-The current vertical slice supports one deterministic 2D Conway's Life layer, native preview controls, and H.264 MP4 export through FFmpeg. The broader product is defined in [`docs/ca-video-spec.md`](docs/ca-video-spec.md).
+The current editable milestone supports one deterministic 2D layer, the complete
+reference 2D rule catalog, custom B/S/C rules, multiple initial-condition types,
+native project editing and persistence, preview controls, and H.264 MP4 export
+through FFmpeg. The broader product is defined in
+[`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
+in [`docs/native-ui-design.md`](docs/native-ui-design.md).
 
 ## Development setup
 

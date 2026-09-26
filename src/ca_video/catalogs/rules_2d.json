@@ -1,0 +1,22 @@
+[
+  {"key":"life","name":"Life","category":"Classic","notation":"B3/S23","description":"Conway's Life","recommended_initial":"random"},
+  {"key":"highlife","name":"HighLife","category":"Classic","notation":"B36/S23","description":"Life variant with a replicator","recommended_initial":"random"},
+  {"key":"longlife","name":"Long Life","category":"Classic","notation":"B345/S5","description":"Very long-lived patterns","recommended_initial":"random"},
+  {"key":"life34","name":"Life 3-4","category":"Classic","notation":"B34/S34","description":"Exploding and chaotic","recommended_initial":"random"},
+  {"key":"seeds","name":"Seeds","category":"Explosive / Chaotic","notation":"B2/S","description":"Every live cell dies; explosive regrowth","recommended_initial":"random"},
+  {"key":"brian","name":"Brian's Brain","category":"Explosive / Chaotic","notation":"B2/S/C3","description":"Three-state firing and decay","recommended_initial":"random"},
+  {"key":"starwars","name":"Star Wars","category":"Explosive / Chaotic","notation":"B2/S345/C4","description":"Four-state extended decay","recommended_initial":"random"},
+  {"key":"replicator","name":"Replicator","category":"Explosive / Chaotic","notation":"B1357/S1357","description":"Self-copying patterns","recommended_initial":"center_block"},
+  {"key":"morley","name":"Morley","category":"Explosive / Chaotic","notation":"B368/S245","description":"Chaotic evolution with gliders","recommended_initial":"random"},
+  {"key":"two_by_two","name":"2x2","category":"Explosive / Chaotic","notation":"B36/S125","description":"Complex evolution","recommended_initial":"random"},
+  {"key":"daynight","name":"Day & Night","category":"Dense / Blobby","notation":"B3678/S34678","description":"Symmetric under on/off reversal","recommended_initial":"random"},
+  {"key":"diamoeba","name":"Diamoeba","category":"Dense / Blobby","notation":"B35678/S5678","description":"Blobby amoeba-like regions","recommended_initial":"random"},
+  {"key":"anneal","name":"Anneal","category":"Dense / Blobby","notation":"B4678/S35678","description":"Solidifying blobs","recommended_initial":"random"},
+  {"key":"coag","name":"Coagulations","category":"Dense / Blobby","notation":"B378/S235678","description":"Sticky growth","recommended_initial":"random"},
+  {"key":"stains","name":"Stains","category":"Dense / Blobby","notation":"B3678/S235678","description":"Expanding ink-like regions","recommended_initial":"random"},
+  {"key":"maze","name":"Maze","category":"Structural","notation":"B3/S12345","description":"Labyrinthine corridors","recommended_initial":"random"},
+  {"key":"mazectric","name":"Mazectric","category":"Structural","notation":"B3/S1234","description":"Orthogonal mazes","recommended_initial":"random"},
+  {"key":"walled","name":"Walled Cities","category":"Structural","notation":"B45678/S2345","description":"Walled regions","recommended_initial":"random"},
+  {"key":"vote","name":"Vote","category":"Structural","notation":"B5678/S45678","description":"Majority-rule smoothing","recommended_initial":"random"},
+  {"key":"vote45","name":"Vote 4/5","category":"Structural","notation":"B4678/S35678","description":"Noisy majority rule","recommended_initial":"random"}
+]
