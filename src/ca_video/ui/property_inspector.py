@@ -154,8 +154,23 @@ class PropertyInspector(QWidget):
             )
             self._cells.setPlaceholderText("One x,y,z voxel coordinate per line")
             self._palette3D.setCurrentIndex(max(0, self._palette3D.findData(layer.palette)))
+            self._renderStyle3D.setCurrentIndex(max(0, self._renderStyle3D.findData(layer.renderStyle)))
             self._voxelScale.setValue(layer.voxelScale)
             self._surfaceOnly.setChecked(layer.surfaceOnly)
+            self._colorBy.setCurrentIndex(max(0, self._colorBy.findData(layer.colorBy)))
+            self._depthShading.setChecked(layer.depthShading)
+            self._vignette.setChecked(layer.vignette)
+            camera = layer.camera or project.camera
+            self._cameraProjection.setCurrentIndex(
+                max(0, self._cameraProjection.findData(camera.projection))
+            )
+            self._azimuth.setValue(camera.azimuthDeg)
+            self._elevation.setValue(camera.elevationDeg)
+            self._zoom.setValue(camera.zoom)
+            self._perspectiveStrength.setValue(camera.perspectiveStrength)
+            self._rotationRate.setValue(camera.rotationDegPerSecond)
+            self._panX.setValue(camera.panX)
+            self._panY.setValue(camera.panY)
         else:
             modeIndex = self._simulationMode.findData(layer.simulationMode)
             self._simulationMode.setCurrentIndex(max(0, modeIndex))
@@ -230,12 +245,32 @@ class PropertyInspector(QWidget):
                 "boundary": self._boundary.currentData(),
             }
             simulationData["initial"] = self._initialData()
-            layerData["render"] = {
-                "style": "isometric_voxel",
+            renderStyle = self._renderStyle3D.currentData()
+            renderData: dict[str, object] = {
+                "style": renderStyle,
                 "palette": self._palette3D.currentData(),
                 "voxel_scale": self._voxelScale.value() or "auto",
                 "surface_only": self._surfaceOnly.isChecked(),
             }
+            if renderStyle == "projected_voxel":
+                renderData.update(
+                    {
+                        "color_by": self._colorBy.currentData(),
+                        "depth_shading": self._depthShading.isChecked(),
+                        "vignette": self._vignette.isChecked(),
+                        "camera": {
+                            "projection": self._cameraProjection.currentData(),
+                            "azimuth_deg": self._azimuth.value(),
+                            "elevation_deg": self._elevation.value(),
+                            "zoom": self._zoom.value(),
+                            "perspective_strength": self._perspectiveStrength.value(),
+                            "rotation_deg_per_second": self._rotationRate.value(),
+                            "pan_x": self._panX.value(),
+                            "pan_y": self._panY.value(),
+                        },
+                    }
+                )
+            layerData["render"] = renderData
         else:
             simulationMode = self._simulationMode.currentData()
             simulationData["mode"] = simulationMode
@@ -407,19 +442,55 @@ class PropertyInspector(QWidget):
         self._layout = QComboBox()
         self._layout.addItem("Fit", "fit")
         self._layout.addItem("Cover", "cover")
+        self._renderStyle3D = QComboBox()
+        self._renderStyle3D.addItem("Isometric faces", "isometric_voxel")
+        self._renderStyle3D.addItem("Camera projected", "projected_voxel")
         self._palette3D = QComboBox()
         for palette in palette3DCatalog():
             self._palette3D.addItem(palette.key.replace("_", " ").title(), palette.key)
         self._voxelScale = self._spinBox(0, 64, " px")
         self._voxelScale.setSpecialValueText("Auto")
         self._surfaceOnly = QCheckBox("Cull fully enclosed voxels")
+        self._colorBy = QComboBox()
+        self._colorBy.addItem("Fixed palette color", "fixed")
+        self._colorBy.addItem("Cell state", "state")
+        self._colorBy.addItem("Height", "height")
+        self._colorBy.addItem("Distance from center", "distance")
+        self._depthShading = QCheckBox("Shade by camera depth")
+        self._vignette = QCheckBox("Darken canvas edges")
         appearanceForm.addRow("Live color", self._liveColor)
         appearanceForm.addRow("Opacity", self._opacity)
         appearanceForm.addRow("Layout", self._layout)
+        appearanceForm.addRow("3D renderer", self._renderStyle3D)
         appearanceForm.addRow("Face palette", self._palette3D)
         appearanceForm.addRow("Voxel scale", self._voxelScale)
         appearanceForm.addRow("Surface only", self._surfaceOnly)
+        appearanceForm.addRow("Color by", self._colorBy)
+        appearanceForm.addRow("Depth shading", self._depthShading)
+        appearanceForm.addRow("Vignette", self._vignette)
         layout.addWidget(appearance)
+
+        self._cameraGroup = QGroupBox("Camera")
+        cameraForm = QFormLayout(self._cameraGroup)
+        self._cameraProjection = QComboBox()
+        self._cameraProjection.addItem("Perspective", "perspective")
+        self._cameraProjection.addItem("Orthographic", "orthographic")
+        self._azimuth = self._doubleSpinBox(-360, 360, 1, "°")
+        self._elevation = self._doubleSpinBox(-89, 89, 1, "°")
+        self._zoom = self._doubleSpinBox(0.1, 10, 0.1, "×")
+        self._perspectiveStrength = self._doubleSpinBox(0, 1, 0.05)
+        self._rotationRate = self._doubleSpinBox(-360, 360, 1, "°/s")
+        self._panX = self._doubleSpinBox(-1, 1, 0.05)
+        self._panY = self._doubleSpinBox(-1, 1, 0.05)
+        cameraForm.addRow("Projection", self._cameraProjection)
+        cameraForm.addRow("Azimuth", self._azimuth)
+        cameraForm.addRow("Elevation", self._elevation)
+        cameraForm.addRow("Zoom", self._zoom)
+        cameraForm.addRow("Perspective", self._perspectiveStrength)
+        cameraForm.addRow("Rotation rate", self._rotationRate)
+        cameraForm.addRow("Pan X", self._panX)
+        cameraForm.addRow("Pan Y", self._panY)
+        layout.addWidget(self._cameraGroup)
 
         timing = QGroupBox("Timing")
         timingForm = QFormLayout(timing)
@@ -462,8 +533,23 @@ class PropertyInspector(QWidget):
         self._opacity.valueChanged.connect(lambda _value: self._emitChange(False))
         self._layout.currentIndexChanged.connect(self._layoutChanged)
         self._palette3D.currentIndexChanged.connect(lambda _value: self._emitChange(False))
+        self._renderStyle3D.currentIndexChanged.connect(self._renderStyleChanged)
         self._voxelScale.valueChanged.connect(lambda _value: self._emitChange(False))
         self._surfaceOnly.toggled.connect(lambda _checked: self._emitChange(False))
+        self._colorBy.currentIndexChanged.connect(lambda _value: self._emitChange(False))
+        self._depthShading.toggled.connect(lambda _checked: self._emitChange(False))
+        self._vignette.toggled.connect(lambda _checked: self._emitChange(False))
+        self._cameraProjection.currentIndexChanged.connect(self._cameraProjectionChanged)
+        for control in (
+            self._azimuth,
+            self._elevation,
+            self._zoom,
+            self._perspectiveStrength,
+            self._rotationRate,
+            self._panX,
+            self._panY,
+        ):
+            control.valueChanged.connect(lambda _value: self._emitChange(False))
         return container
 
     # :: VOID -> widget
@@ -537,6 +623,22 @@ class PropertyInspector(QWidget):
     def _spinBox(self, minimum: int, maximum: int, suffix: str = "") -> QSpinBox:
         control = QSpinBox()
         control.setRange(minimum, maximum)
+        control.setSuffix(suffix)
+        return control
+
+    # :: FLOAT, FLOAT, FLOAT, STRING -> doubleSpinBox
+    # Creates a consistently configured decimal editor
+    def _doubleSpinBox(
+        self,
+        minimum: float,
+        maximum: float,
+        step: float,
+        suffix: str = "",
+    ) -> QDoubleSpinBox:
+        control = QDoubleSpinBox()
+        control.setRange(minimum, maximum)
+        control.setSingleStep(step)
+        control.setDecimals(2)
         control.setSuffix(suffix)
         return control
 
@@ -679,6 +781,18 @@ class PropertyInspector(QWidget):
         self._emitChange(usesPixelOffset)
 
     # :: VOID -> NONE
+    # Switches contextual projected-render controls without resetting simulation
+    def _renderStyleChanged(self) -> None:
+        self._syncRenderControls()
+        self._emitChange(False)
+
+    # :: VOID -> NONE
+    # Applies a projection change and updates perspective-strength visibility
+    def _cameraProjectionChanged(self) -> None:
+        self._syncRenderControls()
+        self._emitChange(False)
+
+    # :: VOID -> NONE
     # Shows a custom seed editor only when override mode is selected
     def _syncSeedControls(self) -> None:
         custom = self._layerSeedMode.currentData() == "custom"
@@ -773,9 +887,25 @@ class PropertyInspector(QWidget):
         self._syncInitialControls()
         self._setFieldVisible(self._appearanceForm, self._liveColor, not is3D)
         self._setFieldVisible(self._appearanceForm, self._layout, not is3D)
+        self._setFieldVisible(self._appearanceForm, self._renderStyle3D, is3D)
         self._setFieldVisible(self._appearanceForm, self._palette3D, is3D)
         self._setFieldVisible(self._appearanceForm, self._voxelScale, is3D)
         self._setFieldVisible(self._appearanceForm, self._surfaceOnly, is3D)
+        self._syncRenderControls()
+
+    # :: VOID -> NONE
+    # Shows projected-only appearance and camera controls contextually
+    def _syncRenderControls(self) -> None:
+        projected = self._is3DLayer() and self._renderStyle3D.currentData() == "projected_voxel"
+        self._setFieldVisible(self._appearanceForm, self._colorBy, projected)
+        self._setFieldVisible(self._appearanceForm, self._depthShading, projected)
+        self._setFieldVisible(self._appearanceForm, self._vignette, projected)
+        self._cameraGroup.setVisible(projected)
+        showPerspective = projected and self._cameraProjection.currentData() == "perspective"
+        self._perspectiveStrength.setVisible(showPerspective)
+        label = self._cameraGroup.layout().labelForField(self._perspectiveStrength)
+        if label is not None:
+            label.setVisible(showPerspective)
 
     # :: formLayout, widget, BOOL -> NONE
     # Shows or hides a form field together with its label

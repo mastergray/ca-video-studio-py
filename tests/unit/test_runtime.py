@@ -201,3 +201,34 @@ def test_mixed_2d_and_3d_layers_render_on_independent_clocks() -> None:
     assert isinstance(runtime.engineForLayer(1), OuterTotalisticEngine3D)
     assert frame.shape == (180, 320, 3)
     assert frame.max() > 0
+
+
+def test_projected_camera_matches_at_equal_preview_and_export_times() -> None:
+    data = defaultProject().toDict()
+    data["output"]["fps"] = 60
+    data["layers"][0] = {
+        "id": "projected",
+        "name": "Projected",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 16, "boundary": "fixed"},
+            "rule": {"preset": "crystal"},
+            "initial": {"type": "cross"},
+        },
+        "render": {
+            "style": "projected_voxel",
+            "palette": "crystal",
+            "color_by": "height",
+            "surface_only": True,
+            "camera": {"rotation_deg_per_second": 90},
+        },
+    }
+    project = parseProject(data)
+    previewRuntime = ProjectRuntime(project, (320, 180))
+    exportRuntime = ProjectRuntime(project, (320, 180))
+
+    previewFrame = previewRuntime.renderAtTick(15, 30)
+    exportFrame = exportRuntime.renderFrame(30)
+
+    np.testing.assert_array_equal(previewFrame, exportFrame)

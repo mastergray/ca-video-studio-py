@@ -31,6 +31,7 @@ ENCODER_PRESETS = {
 INITIAL_TYPES = {"random", "center_block", "disc", "cells", "rle", "catalog_default"}
 WOLFRAM_INITIAL_TYPES = {"single_center", "random", "bits"}
 INITIAL_TYPES_3D = {"random", "center_block", "sphere", "cells", "single", "cross", "catalog_default"}
+PROJECTED_COLOR_MODES = {"fixed", "state", "height", "distance"}
 
 
 # Indicates that a project configuration is invalid or unsupported
@@ -515,10 +516,84 @@ class Initial3DConfig:
         return self._origin
 
 
-# Stores validated settings for an isometric three-dimensional layer
+# Stores deterministic camera settings for projected voxel rendering
+class CameraConfig:
+
+    # CONSTRUCTOR :: STRING, FLOAT, FLOAT, FLOAT, FLOAT, FLOAT, FLOAT, FLOAT -> cameraConfig
+    # Creates immutable-by-convention camera settings
+    def __init__(
+        self,
+        projection: str = "perspective",
+        azimuthDeg: float = 30,
+        elevationDeg: float = 28,
+        zoom: float = 1,
+        perspectiveStrength: float = 0.35,
+        rotationDegPerSecond: float = 12,
+        panX: float = 0,
+        panY: float = 0,
+    ) -> None:
+        self._projection = projection
+        self._azimuthDeg = azimuthDeg
+        self._elevationDeg = elevationDeg
+        self._zoom = zoom
+        self._perspectiveStrength = perspectiveStrength
+        self._rotationDegPerSecond = rotationDegPerSecond
+        self._panX = panX
+        self._panY = panY
+
+    # PROPERTY :: VOID -> STRING
+    # Returns perspective or orthographic projection
+    @property
+    def projection(self) -> str:
+        return self._projection
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the base rotation around the vertical axis
+    @property
+    def azimuthDeg(self) -> float:
+        return self._azimuthDeg
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the camera elevation angle
+    @property
+    def elevationDeg(self) -> float:
+        return self._elevationDeg
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the camera zoom multiplier
+    @property
+    def zoom(self) -> float:
+        return self._zoom
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the perspective distortion strength
+    @property
+    def perspectiveStrength(self) -> float:
+        return self._perspectiveStrength
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the time-based azimuth rotation rate
+    @property
+    def rotationDegPerSecond(self) -> float:
+        return self._rotationDegPerSecond
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns horizontal pan in normalized canvas units
+    @property
+    def panX(self) -> float:
+        return self._panX
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns vertical pan in normalized canvas units
+    @property
+    def panY(self) -> float:
+        return self._panY
+
+
+# Stores validated settings for a three-dimensional voxel layer
 class Layer3DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule, STRING, initial3DConfig, INT?, STRING, INT, BOOL -> layer3DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule, STRING, initial3DConfig, INT?, STRING, INT, BOOL, STRING, STRING, BOOL, BOOL, cameraConfig? -> layer3DConfig
     # Creates immutable-by-convention 3D layer settings
     def __init__(
         self,
@@ -537,6 +612,11 @@ class Layer3DConfig:
         palette: str,
         voxelScale: int,
         surfaceOnly: bool,
+        renderStyle: str = "isometric_voxel",
+        colorBy: str = "fixed",
+        depthShading: bool = True,
+        vignette: bool = False,
+        camera: CameraConfig | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -553,6 +633,11 @@ class Layer3DConfig:
         self._palette = palette
         self._voxelScale = voxelScale
         self._surfaceOnly = surfaceOnly
+        self._renderStyle = renderStyle
+        self._colorBy = colorBy
+        self._depthShading = depthShading
+        self._vignette = vignette
+        self._camera = camera
 
     # PROPERTY :: VOID -> STRING
     # Returns the layer dimensionality
@@ -650,6 +735,36 @@ class Layer3DConfig:
     def surfaceOnly(self) -> bool:
         return self._surfaceOnly
 
+    # PROPERTY :: VOID -> STRING
+    # Returns the selected 3D rasterization style
+    @property
+    def renderStyle(self) -> str:
+        return self._renderStyle
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the projected voxel color mapping
+    @property
+    def colorBy(self) -> str:
+        return self._colorBy
+
+    # PROPERTY :: VOID -> BOOL
+    # Returns whether projected voxels are depth shaded
+    @property
+    def depthShading(self) -> bool:
+        return self._depthShading
+
+    # PROPERTY :: VOID -> BOOL
+    # Returns whether the projected layer darkens canvas edges
+    @property
+    def vignette(self) -> bool:
+        return self._vignette
+
+    # PROPERTY :: VOID -> cameraConfig?
+    # Returns a layer camera override or None for the project camera
+    @property
+    def camera(self) -> CameraConfig | None:
+        return self._camera
+
 
 LayerConfig = Layer2DConfig | Layer3DConfig
 
@@ -657,7 +772,7 @@ LayerConfig = Layer2DConfig | Layer3DConfig
 # Stores a fully validated project configuration
 class ProjectConfig:
 
-    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layerConfig|(layerConfig), path -> projectConfig
+    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layerConfig|(layerConfig), path, cameraConfig? -> projectConfig
     # Creates immutable-by-convention project settings
     def __init__(
         self,
@@ -668,6 +783,7 @@ class ProjectConfig:
         canvasBackground: tuple[int, int, int],
         layers: LayerConfig | tuple[LayerConfig, ...] | list[LayerConfig],
         baseDir: Path,
+        camera: CameraConfig | None = None,
     ) -> None:
         self._schemaVersion = schemaVersion
         self._name = name
@@ -678,6 +794,7 @@ class ProjectConfig:
         if not self._layers:
             raise ConfigError("a project requires at least one layer")
         self._baseDir = baseDir
+        self._camera = camera or CameraConfig()
 
     #
     # Properties
@@ -731,6 +848,12 @@ class ProjectConfig:
     def baseDir(self) -> Path:
         return self._baseDir
 
+    # PROPERTY :: VOID -> cameraConfig
+    # Returns the project camera used by projected layers without overrides
+    @property
+    def camera(self) -> CameraConfig:
+        return self._camera
+
     #
     # Instance Methods
     #
@@ -752,6 +875,7 @@ class ProjectConfig:
             self._canvasBackground,
             self._layers,
             self._baseDir,
+            self._camera,
         )
 
     # :: VOID -> ARRAY<STRING, ANY>
@@ -771,8 +895,24 @@ class ProjectConfig:
                 "encoder_preset": self._output.encoderPreset,
             },
             "canvas": {"background": colorToHex(self._canvasBackground)},
+            "camera": _cameraToDict(self._camera),
             "layers": [_layerToDict(layer) for layer in self._layers],
         }
+
+
+# :: cameraConfig -> ARRAY<STRING, ANY>
+# Serializes normalized projected-camera settings
+def _cameraToDict(camera: CameraConfig) -> dict[str, Any]:
+    return {
+        "projection": camera.projection,
+        "azimuth_deg": camera.azimuthDeg,
+        "elevation_deg": camera.elevationDeg,
+        "zoom": camera.zoom,
+        "perspective_strength": camera.perspectiveStrength,
+        "rotation_deg_per_second": camera.rotationDegPerSecond,
+        "pan_x": camera.panX,
+        "pan_y": camera.panY,
+    }
 
 
 # :: layerConfig -> ARRAY<STRING, ANY>
@@ -788,6 +928,22 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
         if initial.type == "cells":
             initialData["origin"] = initial.origin
             initialData["cells"] = [list(cell) for cell in initial.cells]
+        renderData: dict[str, Any] = {
+            "style": layer.renderStyle,
+            "palette": layer.palette,
+            "voxel_scale": layer.voxelScale or "auto",
+            "surface_only": layer.surfaceOnly,
+        }
+        if layer.renderStyle == "projected_voxel":
+            renderData.update(
+                {
+                    "color_by": layer.colorBy,
+                    "depth_shading": layer.depthShading,
+                    "vignette": layer.vignette,
+                }
+            )
+            if layer.camera is not None:
+                renderData["camera"] = _cameraToDict(layer.camera)
         return {
             "id": layer.id,
             "name": layer.name,
@@ -803,12 +959,7 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
                 "rule": {"preset": layer.rulePreset},
                 "initial": initialData,
             },
-            "render": {
-                "style": "isometric_voxel",
-                "palette": layer.palette,
-                "voxel_scale": layer.voxelScale or "auto",
-                "surface_only": layer.surfaceOnly,
-            },
+            "render": renderData,
         }
 
     initial = layer.initial
@@ -875,8 +1026,52 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
     }
 
 
-# :: ARRAY<STRING, ANY>, STRING, STRING, BOOL, INT, FLOAT, INT, INT? -> layer3DConfig
-# Parses a validated common layer envelope as an isometric 3D layer
+# :: ANY, STRING, cameraConfig? -> cameraConfig
+# Parses complete or partial projected camera settings
+def _parseCamera(value: Any, path: str, base: CameraConfig | None = None) -> CameraConfig:
+    data = _asMapping(value, path)
+    _rejectUnknown(
+        data,
+        {
+            "projection",
+            "azimuth_deg",
+            "elevation_deg",
+            "zoom",
+            "perspective_strength",
+            "rotation_deg_per_second",
+            "pan_x",
+            "pan_y",
+        },
+        path,
+    )
+    defaults = base or CameraConfig()
+    projection = data.get("projection", defaults.projection)
+    if projection not in {"orthographic", "perspective"}:
+        raise ConfigError(f"{path}.projection must be orthographic or perspective")
+    return CameraConfig(
+        projection,
+        _asNumber(data.get("azimuth_deg", defaults.azimuthDeg), f"{path}.azimuth_deg", -360, 360),
+        _asNumber(data.get("elevation_deg", defaults.elevationDeg), f"{path}.elevation_deg", -89, 89),
+        _asNumber(data.get("zoom", defaults.zoom), f"{path}.zoom", 0.1, 10),
+        _asNumber(
+            data.get("perspective_strength", defaults.perspectiveStrength),
+            f"{path}.perspective_strength",
+            0,
+            1,
+        ),
+        _asNumber(
+            data.get("rotation_deg_per_second", defaults.rotationDegPerSecond),
+            f"{path}.rotation_deg_per_second",
+            -360,
+            360,
+        ),
+        _asNumber(data.get("pan_x", defaults.panX), f"{path}.pan_x", -1, 1),
+        _asNumber(data.get("pan_y", defaults.panY), f"{path}.pan_y", -1, 1),
+    )
+
+
+# :: ARRAY<STRING, ANY>, STRING, STRING, BOOL, INT, FLOAT, INT, INT?, cameraConfig -> layer3DConfig
+# Parses a validated common layer envelope as a 3D voxel layer
 def _parseLayer3D(
     layerData: Mapping[str, Any],
     layerId: str,
@@ -886,6 +1081,7 @@ def _parseLayer3D(
     opacity: float,
     stepIntervalMs: int,
     layerSeed: int | None,
+    projectCamera: CameraConfig,
 ) -> Layer3DConfig:
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
     _rejectUnknown(simulation, {"mode", "grid", "rule", "initial"}, "layers[0].simulation")
@@ -953,9 +1149,23 @@ def _parseLayer3D(
     initial = Initial3DConfig(initialType, density, radius, cells, origin)
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
-    _rejectUnknown(render, {"style", "palette", "voxel_scale", "surface_only"}, "layers[0].render")
-    if render.get("style") != "isometric_voxel":
-        raise ConfigError("3D layers currently support only the isometric_voxel render style")
+    _rejectUnknown(
+        render,
+        {
+            "style",
+            "palette",
+            "voxel_scale",
+            "surface_only",
+            "color_by",
+            "depth_shading",
+            "vignette",
+            "camera",
+        },
+        "layers[0].render",
+    )
+    renderStyle = render.get("style")
+    if renderStyle not in {"isometric_voxel", "projected_voxel"}:
+        raise ConfigError("layers[0].render.style must be isometric_voxel or projected_voxel")
     palette = render.get("palette", rulePreset)
     if not isinstance(palette, str):
         raise ConfigError("layers[0].render.palette must be a string")
@@ -972,6 +1182,25 @@ def _parseLayer3D(
     surfaceOnly = render.get("surface_only", True)
     if not isinstance(surfaceOnly, bool):
         raise ConfigError("layers[0].render.surface_only must be true or false")
+    colorBy = render.get("color_by", "fixed")
+    if colorBy not in PROJECTED_COLOR_MODES:
+        choices = ", ".join(sorted(PROJECTED_COLOR_MODES))
+        raise ConfigError(f"layers[0].render.color_by must be one of {choices}")
+    depthShading = render.get("depth_shading", True)
+    if not isinstance(depthShading, bool):
+        raise ConfigError("layers[0].render.depth_shading must be true or false")
+    vignette = render.get("vignette", False)
+    if not isinstance(vignette, bool):
+        raise ConfigError("layers[0].render.vignette must be true or false")
+    camera = (
+        _parseCamera(render["camera"], "layers[0].render.camera", projectCamera)
+        if "camera" in render
+        else None
+    )
+    if renderStyle == "isometric_voxel" and any(
+        field in render for field in {"color_by", "depth_shading", "vignette", "camera"}
+    ):
+        raise ConfigError("projected render controls require the projected_voxel style")
     return Layer3DConfig(
         layerId,
         layerName.strip(),
@@ -988,10 +1217,15 @@ def _parseLayer3D(
         palette,
         voxelScale,
         surfaceOnly,
+        renderStyle,
+        colorBy,
+        depthShading,
+        vignette,
+        camera,
     )
 
 
-# :: ARRAY<STRING, ANY>, [ANY], layerConfig, INT, STRING, INT, outputConfig, (INT, INT, INT), path -> projectConfig
+# :: ARRAY<STRING, ANY>, [ANY], layerConfig, INT, STRING, INT, outputConfig, (INT, INT, INT), path, cameraConfig -> projectConfig
 # Parses remaining layers and completes a project model
 def _completeProject(
     root: Mapping[str, Any],
@@ -1003,6 +1237,7 @@ def _completeProject(
     output: OutputConfig,
     background: tuple[int, int, int],
     resolvedBaseDir: Path,
+    camera: CameraConfig,
 ) -> ProjectConfig:
     parsedLayers = [firstLayer]
     for layerIndex, extraLayerData in enumerate(layers[1:], 1):
@@ -1024,6 +1259,7 @@ def _completeProject(
         background,
         tuple(parsedLayers),
         resolvedBaseDir,
+        camera,
     )
 
 
@@ -1032,7 +1268,7 @@ def _completeProject(
 def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> ProjectConfig:
     resolvedBaseDir = baseDir or Path.cwd()
     root = _asMapping(data, "project")
-    _rejectUnknown(root, {"schema_version", "project", "output", "canvas", "layers"}, "project")
+    _rejectUnknown(root, {"schema_version", "project", "output", "canvas", "camera", "layers"}, "project")
     schemaVersion = _asInteger(root.get("schema_version"), "schema_version", 1, 1)
 
     projectData = _asMapping(root.get("project"), "project")
@@ -1073,6 +1309,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     canvas = _asMapping(root.get("canvas", {"background": "#0d1117"}), "canvas")
     _rejectUnknown(canvas, {"background"}, "canvas")
     background = _asColor(canvas.get("background", "#0d1117"), "canvas.background")
+    camera = _parseCamera(root.get("camera", {}), "camera")
 
     layers = root.get("layers")
     if not isinstance(layers, list) or not 1 <= len(layers) <= 32:
@@ -1125,6 +1362,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
             opacity,
             stepIntervalMs,
             layerSeed,
+            camera,
         )
         return _completeProject(
             root,
@@ -1136,6 +1374,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
             output,
             background,
             resolvedBaseDir,
+            camera,
         )
 
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
@@ -1361,6 +1600,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         output,
         background,
         resolvedBaseDir,
+        camera,
     )
 
 

@@ -7,7 +7,9 @@ from ca_video.catalogs.rules_3d import (  # Verify reference 3D catalogs
     palette3DCatalog,
     rule3DCatalog,
 )
+from ca_video.config.models import CameraConfig  # Configure projected camera tests
 from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel fixtures
+from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Test camera projection
 from ca_video.simulation.initialization_3d import initializeGrid3D  # Build seeded voxel grids
 from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D rules
 from ca_video.simulation.rules import parseRule  # Validate 3D B/S limits
@@ -70,3 +72,45 @@ def test_3d_renderer_produces_transparent_exact_size_layer() -> None:
     assert layer.dtype == np.float32
     assert layer[..., 3].max() == 1
     assert np.count_nonzero(layer[..., 3]) > 0
+
+
+def test_projected_renderer_is_timestamp_driven_and_exact_size() -> None:
+    grid = np.zeros((12, 12, 12), dtype=np.uint8)
+    grid[4:8, 5, 4:8] = 1
+    camera = CameraConfig(rotationDegPerSecond=45)
+    renderer = ProjectedRenderer3D(320, 180, getPalette3D("crystal"), camera, colorBy="height")
+
+    initial = renderer.renderLayer(grid, 0)
+    rotated = renderer.renderLayer(grid, 1)
+
+    assert initial.shape == (180, 320, 4)
+    assert initial.dtype == np.float32
+    assert initial[..., 3].max() == 1
+    assert not np.array_equal(initial, rotated)
+    np.testing.assert_array_equal(renderer.renderLayer(grid, 1), rotated)
+
+
+def test_projected_renderer_keeps_nearest_voxel_per_pixel() -> None:
+    camera = CameraConfig(
+        projection="orthographic",
+        azimuthDeg=0,
+        elevationDeg=0,
+        rotationDegPerSecond=0,
+    )
+    renderer = ProjectedRenderer3D(
+        160,
+        90,
+        getPalette3D("crystal"),
+        camera,
+        voxelScale=8,
+        surfaceOnly=False,
+        colorBy="state",
+        depthShading=False,
+        states=3,
+    )
+    nearOnly = np.zeros((9, 9, 9), dtype=np.uint8)
+    nearOnly[4, 2, 4] = 1
+    overlapped = nearOnly.copy()
+    overlapped[4, 6, 4] = 2
+
+    np.testing.assert_array_equal(renderer.renderLayer(overlapped), renderer.renderLayer(nearOnly))

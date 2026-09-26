@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Projected Crystal",
+    "seed": 1
+  },
+  "output": {
+    "path": "renders/projected-crystal.mp4",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_seconds": 10,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#0d1117"
+  },
+  "camera": {
+    "projection": "perspective",
+    "azimuth_deg": 30,
+    "elevation_deg": 25,
+    "zoom": 1,
+    "perspective_strength": 0.4,
+    "rotation_deg_per_second": 12,
+    "pan_x": 0,
+    "pan_y": 0
+  },
+  "layers": [
+    {
+      "id": "projected_crystal",
+      "name": "Projected Crystal",
+      "enabled": true,
+      "dimension": "3d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 180,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "grid_size": 32,
+          "boundary": "fixed"
+        },
+        "rule": {
+          "preset": "crystal"
+        },
+        "initial": {
+          "type": "cross"
+        }
+      },
+      "render": {
+        "style": "projected_voxel",
+        "palette": "crystal",
+        "color_by": "distance",
+        "voxel_scale": "auto",
+        "surface_only": true,
+        "depth_shading": true,
+        "vignette": true
+      }
+    }
+  ]
+}

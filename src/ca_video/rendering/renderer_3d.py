@@ -37,9 +37,9 @@ class Renderer3D:
     # Instance Methods
     #
 
-    # :: grid3D -> rgbaFrame
+    # :: grid3D, FLOAT -> rgbaFrame
     # Renders occupied voxels into a transparent layer
-    def renderLayer(self, grid: NDArray[np.uint8]) -> RGBAFrame:
+    def renderLayer(self, grid: NDArray[np.uint8], presentationSeconds: float = 0) -> RGBAFrame:
         if grid.ndim != 3 or len(set(grid.shape)) != 1:
             raise ValueError("3D renderer requires a cubic voxel grid")
         image = QImage(self._width, self._height, QImage.Format.Format_RGBA8888)

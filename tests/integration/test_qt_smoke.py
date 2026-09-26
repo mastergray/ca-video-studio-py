@@ -249,3 +249,36 @@ def test_add_and_edit_3d_layer() -> None:
     assert not inspector._simulationMode.isVisibleTo(inspector)
     window._setDirty(False)
     window.close()
+
+
+def test_switch_3d_layer_to_projected_camera_controls() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    window._add3DLayer()
+    inspector = window.inspector
+
+    inspector._renderStyle3D.setCurrentIndex(
+        inspector._renderStyle3D.findData("projected_voxel")
+    )
+    inspector._colorBy.setCurrentIndex(inspector._colorBy.findData("height"))
+    inspector._cameraProjection.setCurrentIndex(
+        inspector._cameraProjection.findData("orthographic")
+    )
+    inspector._azimuth.setValue(55)
+    inspector._elevation.setValue(18)
+    inspector._rotationRate.setValue(-30)
+    inspector._panX.setValue(0.15)
+    app.processEvents()
+
+    layer = window.project.layer
+    assert layer.renderStyle == "projected_voxel"
+    assert layer.colorBy == "height"
+    assert layer.camera.projection == "orthographic"
+    assert layer.camera.azimuthDeg == 55
+    assert layer.camera.elevationDeg == 18
+    assert layer.camera.rotationDegPerSecond == -30
+    assert layer.camera.panX == 0.15
+    assert inspector._cameraGroup.isVisibleTo(inspector)
+    assert not inspector._perspectiveStrength.isVisibleTo(inspector)
+    window._setDirty(False)
+    window.close()

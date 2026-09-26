@@ -241,3 +241,71 @@ def test_mixed_2d_and_3d_layers_parse_together() -> None:
 
     assert [layer.dimension for layer in project.layers] == ["2d", "3d"]
     assert parseProject(project.toDict()).layers[1].rulePreset == "crystal"
+
+
+def test_projected_camera_and_render_controls_round_trip() -> None:
+    data = defaultProject().toDict()
+    data["camera"].update(
+        {
+            "azimuth_deg": 42,
+            "elevation_deg": 20,
+            "rotation_deg_per_second": -15,
+        }
+    )
+    data["layers"][0] = {
+        "id": "projected",
+        "name": "Projected",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 20, "boundary": "fixed"},
+            "rule": {"preset": "crystal"},
+            "initial": {"type": "cross"},
+        },
+        "render": {
+            "style": "projected_voxel",
+            "palette": "crystal",
+            "color_by": "distance",
+            "voxel_scale": 7,
+            "surface_only": True,
+            "depth_shading": False,
+            "vignette": True,
+            "camera": {"zoom": 1.4, "pan_x": 0.2},
+        },
+    }
+
+    project = parseProject(data)
+    normalized = parseProject(project.toDict())
+
+    assert normalized.camera.azimuthDeg == 42
+    assert normalized.layer.renderStyle == "projected_voxel"
+    assert normalized.layer.colorBy == "distance"
+    assert normalized.layer.camera.zoom == 1.4
+    assert normalized.layer.camera.panX == 0.2
+    assert normalized.layer.camera.elevationDeg == 20
+    assert not normalized.layer.depthShading
+    assert normalized.layer.vignette
+
+
+def test_isometric_style_rejects_projected_only_controls() -> None:
+    data = defaultProject().toDict()
+    layer = {
+        "id": "voxels",
+        "name": "Voxels",
+        "dimension": "3d",
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {"grid_size": 16, "boundary": "fixed"},
+            "rule": {"preset": "445"},
+            "initial": {"type": "single"},
+        },
+        "render": {
+            "style": "isometric_voxel",
+            "palette": "445",
+            "color_by": "height",
+        },
+    }
+    data["layers"][0] = layer
+
+    with pytest.raises(ConfigError, match="projected render controls"):
+        parseProject(data)

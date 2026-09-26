@@ -59,9 +59,9 @@ class Renderer2D:
         frame = self._background * (1.0 - alpha) + layer[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: grid -> rgbaFrame
+    # :: grid, FLOAT -> rgbaFrame
     # Renders transparent color and alpha for project composition
-    def renderLayer(self, grid: NDArray[np.uint8]) -> RGBAFrame:
+    def renderLayer(self, grid: NDArray[np.uint8], presentationSeconds: float = 0) -> RGBAFrame:
         gridHeight, gridWidth = grid.shape
         renderWidth, renderHeight = scaledGridSize(
             self._width,

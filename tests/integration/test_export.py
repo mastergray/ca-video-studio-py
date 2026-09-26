@@ -119,7 +119,13 @@ def test_3d_project_exports_through_shared_pipeline(tmp_path) -> None:
             "rule": {"preset": "crystal"},
             "initial": {"type": "cross"},
         },
-        "render": {"style": "isometric_voxel", "palette": "crystal"},
+        "render": {
+            "style": "projected_voxel",
+            "palette": "crystal",
+            "color_by": "distance",
+            "surface_only": True,
+            "camera": {"rotation_deg_per_second": 30},
+        },
     }
     output = tmp_path / "crystal.mp4"
     renderProject(parseProject(data, tmp_path), output)

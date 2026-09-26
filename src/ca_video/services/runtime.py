@@ -14,6 +14,7 @@ from ca_video.config.models import (  # Read validated project and layer setting
 )
 from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
 from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
+from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Project camera-aware voxels
 from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
 from ca_video.simulation.initialization_3d import initializeGrid3D  # Build starting voxel grids
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
@@ -21,7 +22,7 @@ from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D aut
 from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
 
 SimulationEngine = OuterTotalisticEngine | OuterTotalisticEngine3D | WolframEngine
-LayerRenderer = Renderer2D | Renderer3D
+LayerRenderer = Renderer2D | Renderer3D | ProjectedRenderer3D
 
 
 # :: INT, STRING -> INT
@@ -255,15 +256,31 @@ class ProjectRuntime:
         renderers: dict[str, LayerRenderer] = {}
         for layer in self._project.layers:
             if isinstance(layer, Layer3DConfig):
-                renderers[layer.id] = Renderer3D(
-                    self._renderWidth,
-                    self._renderHeight,
-                    getPalette3D(layer.palette),
-                    layer.opacity,
-                    layer.voxelScale,
-                    layer.surfaceOnly,
-                    layer.boundary,
-                )
+                if layer.renderStyle == "projected_voxel":
+                    renderers[layer.id] = ProjectedRenderer3D(
+                        self._renderWidth,
+                        self._renderHeight,
+                        getPalette3D(layer.palette),
+                        layer.camera or self._project.camera,
+                        layer.opacity,
+                        layer.voxelScale,
+                        layer.surfaceOnly,
+                        layer.boundary,
+                        layer.colorBy,
+                        layer.depthShading,
+                        layer.vignette,
+                        layer.rule.states,
+                    )
+                else:
+                    renderers[layer.id] = Renderer3D(
+                        self._renderWidth,
+                        self._renderHeight,
+                        getPalette3D(layer.palette),
+                        layer.opacity,
+                        layer.voxelScale,
+                        layer.surfaceOnly,
+                        layer.boundary,
+                    )
             else:
                 renderers[layer.id] = Renderer2D(
                     self._renderWidth,
@@ -282,10 +299,14 @@ class ProjectRuntime:
         frame = np.empty((self._renderHeight, self._renderWidth, 3), dtype=np.float32)
         frame[:] = self._project.canvasBackground
         indexedLayers = enumerate(self._project.layers)
+        presentationSeconds = self._currentTimeTicks / self._currentTimebase
         for _, layer in sorted(indexedLayers, key=lambda item: (item[1].zIndex, item[0])):
             if not layer.enabled:
                 continue
-            rendered = self._renderers[layer.id].renderLayer(self._engines[layer.id].grid)
+            rendered = self._renderers[layer.id].renderLayer(
+                self._engines[layer.id].grid,
+                presentationSeconds,
+            )
             alpha = rendered[..., 3:4]
             frame = frame * (1.0 - alpha) + rendered[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
