@@ -1,5 +1,6 @@
 from __future__ import annotations  # Enable forward references in type annotations
 
+from copy import deepcopy  # Duplicate nested layer mappings safely
 from pathlib import Path  # Represent project and render destinations
 
 import numpy as np  # Describe RGB frames displayed by the preview
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
         self._dirty = False
         self._previewOnly = False
         self._loadingUi = False
+        self._selectedLayerIndex = 0
         self._renderThread: QThread | None = None
         self._renderWorker: RenderWorker | None = None
 
@@ -192,15 +194,26 @@ class MainWindow(QMainWindow):
         self._layerList = QListWidget()
         self._layerList.setObjectName("layerList")
         self._layerList.itemChanged.connect(self._layerItemChanged)
+        self._layerList.currentRowChanged.connect(self._layerSelectionChanged)
         layout.addWidget(self._layerList, 1)
-        addButton = QPushButton("+ Add Layer")
-        addButton.setEnabled(False)
-        addButton.setToolTip("Additional layers arrive with the composition milestone")
-        layout.addWidget(addButton)
-        duplicateButton = QPushButton("Duplicate")
-        duplicateButton.setEnabled(False)
-        duplicateButton.setToolTip("Additional layers arrive with the composition milestone")
-        layout.addWidget(duplicateButton)
+        self._addLayerButton = QPushButton("+ Add 2D Layer")
+        self._addLayerButton.clicked.connect(self._addLayer)
+        layout.addWidget(self._addLayerButton)
+        self._duplicateLayerButton = QPushButton("Duplicate")
+        self._duplicateLayerButton.clicked.connect(self._duplicateLayer)
+        layout.addWidget(self._duplicateLayerButton)
+        orderControls = QHBoxLayout()
+        self._moveUpButton = QPushButton("↑")
+        self._moveUpButton.setToolTip("Move layer up and composite it later")
+        self._moveUpButton.clicked.connect(lambda: self._moveLayer(-1))
+        self._moveDownButton = QPushButton("↓")
+        self._moveDownButton.clicked.connect(lambda: self._moveLayer(1))
+        self._deleteLayerButton = QPushButton("Delete")
+        self._deleteLayerButton.clicked.connect(self._deleteLayer)
+        orderControls.addWidget(self._moveUpButton)
+        orderControls.addWidget(self._moveDownButton)
+        orderControls.addWidget(self._deleteLayerButton)
+        layout.addLayout(orderControls)
         return panel
 
     # :: VOID -> widget
@@ -345,12 +358,15 @@ class MainWindow(QMainWindow):
     def _loadUiFromProject(self) -> None:
         self._loadingUi = True
         self._layerList.clear()
-        item = QListWidgetItem(f"{self._project.layer.name}    2D")
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if self._project.layer.enabled else Qt.CheckState.Unchecked)
-        self._layerList.addItem(item)
-        self._layerList.setCurrentItem(item)
-        self._inspector.setProject(self._project)
+        self._selectedLayerIndex = min(self._selectedLayerIndex, len(self._project.layers) - 1)
+        for layer in self._project.layers:
+            item = QListWidgetItem(f"{layer.name}    2D")
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if layer.enabled else Qt.CheckState.Unchecked)
+            self._layerList.addItem(item)
+        self._layerList.setCurrentRow(self._selectedLayerIndex)
+        self._inspector.setProject(self._project, self._selectedLayerIndex)
+        self._updateLayerActions()
         self._loadingUi = False
 
     # :: VOID -> NONE
@@ -362,15 +378,15 @@ class MainWindow(QMainWindow):
     # Displays a frame and refreshes preview statistics
     def _showFrame(self, frame: np.ndarray) -> None:
         self._preview.setFrame(frame)
-        engine = self._runtime.engine
+        layer = self._project.layers[self._selectedLayerIndex]
+        engine = self._runtime.engineForLayer(self._selectedLayerIndex)
         density = engine.liveCount / engine.grid.size * 100
         duration = self._project.output.durationSeconds
         currentSeconds = self._frameIndex / self._project.output.fps
         self._timeLabel.setText(f"{currentSeconds:06.2f} / {duration:06.2f} s")
         self._infoLabel.setText(
             f"Gen {engine.generation}  ·  {engine.liveCount:,} live  ·  {density:.1f}%  ·  "
-            f"{self._project.layer.gridWidth}×{self._project.layer.gridHeight}  ·  "
-            f"{self._project.layer.rule.notation}"
+            f"{layer.name}  ·  {layer.gridWidth}×{layer.gridHeight}  ·  {layer.rule.notation}"
         )
 
     # :: VOID -> NONE
@@ -446,7 +462,7 @@ class MainWindow(QMainWindow):
         self._diagnostics.setText("✓ Project is valid")
         self._diagnostics.setStyleSheet("color: #7abf6e;")
         self._configureTimer()
-        self._refreshLayerItem()
+        self._refreshLayerItems()
         self._showFrame(frame)
 
     # :: STRING -> NONE
@@ -461,21 +477,117 @@ class MainWindow(QMainWindow):
     def _layerItemChanged(self, item: QListWidgetItem) -> None:
         if self._loadingUi:
             return
+        layerIndex = self._layerList.row(item)
         data = self._project.toDict()
-        data["layers"][0]["enabled"] = item.checkState() == Qt.CheckState.Checked
+        data["layers"][layerIndex]["enabled"] = item.checkState() == Qt.CheckState.Checked
         self._applyEditorData(data, True)
-        self._inspector.setProject(self._project)
+        self._inspector.setProject(self._project, self._selectedLayerIndex)
+
+    # :: INT -> NONE
+    # Selects a layer and loads its contextual inspector values
+    def _layerSelectionChanged(self, layerIndex: int) -> None:
+        if self._loadingUi or layerIndex < 0:
+            return
+        self._selectedLayerIndex = layerIndex
+        self._inspector.setProject(self._project, layerIndex)
+        self._updateLayerActions()
+        self._showFrame(self._runtime.renderFrame(self._frameIndex))
 
     # :: VOID -> NONE
-    # Refreshes the visible single-layer row after inspector edits
-    def _refreshLayerItem(self) -> None:
-        item = self._layerList.item(0)
-        if item is None:
-            return
+    # Refreshes all layer rows after inspector edits
+    def _refreshLayerItems(self) -> None:
         self._loadingUi = True
-        item.setText(f"{self._project.layer.name}    2D")
-        item.setCheckState(Qt.CheckState.Checked if self._project.layer.enabled else Qt.CheckState.Unchecked)
+        for layerIndex, layer in enumerate(self._project.layers):
+            item = self._layerList.item(layerIndex)
+            if item is None:
+                continue
+            item.setText(f"{layer.name}    2D")
+            item.setCheckState(Qt.CheckState.Checked if layer.enabled else Qt.CheckState.Unchecked)
         self._loadingUi = False
+
+    # :: VOID -> NONE
+    # Adds a default independently seeded 2D layer at the top of the stack
+    def _addLayer(self) -> None:
+        data = self._project.toDict()
+        layerNumber = len(data["layers"]) + 1
+        layerData = defaultProject(self._project.baseDir).toDict()["layers"][0]
+        layerData["id"] = self._uniqueLayerId(f"layer_{layerNumber}")
+        layerData["name"] = f"Layer {layerNumber}"
+        layerData["render"]["color"] = "#3ac5c9"
+        data["layers"].insert(0, layerData)
+        self._normalizeLayerOrder(data)
+        self._selectedLayerIndex = 0
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: VOID -> NONE
+    # Duplicates the selected layer with a fresh stable identifier
+    def _duplicateLayer(self) -> None:
+        data = self._project.toDict()
+        source = data["layers"][self._selectedLayerIndex]
+        duplicate = deepcopy(source)
+        duplicate["id"] = self._uniqueLayerId(f"{source['id']}_copy")
+        duplicate["name"] = f"{source['name']} Copy"
+        data["layers"].insert(self._selectedLayerIndex, duplicate)
+        self._normalizeLayerOrder(data)
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: VOID -> NONE
+    # Deletes the selected layer while preserving the one-layer minimum
+    def _deleteLayer(self) -> None:
+        if len(self._project.layers) <= 1:
+            return
+        data = self._project.toDict()
+        del data["layers"][self._selectedLayerIndex]
+        self._selectedLayerIndex = min(self._selectedLayerIndex, len(data["layers"]) - 1)
+        self._normalizeLayerOrder(data)
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: INT -> NONE
+    # Moves the selected layer through the visual stack
+    def _moveLayer(self, offset: int) -> None:
+        targetIndex = self._selectedLayerIndex + offset
+        if not 0 <= targetIndex < len(self._project.layers):
+            return
+        data = self._project.toDict()
+        layers = data["layers"]
+        layers[self._selectedLayerIndex], layers[targetIndex] = layers[targetIndex], layers[self._selectedLayerIndex]
+        self._selectedLayerIndex = targetIndex
+        self._normalizeLayerOrder(data)
+        self._applyEditorData(data, False)
+        self._loadUiFromProject()
+
+    # :: STRING -> STRING
+    # Produces an unused valid layer identifier
+    def _uniqueLayerId(self, base: str) -> str:
+        existing = {layer.id for layer in self._project.layers}
+        candidate = base[:64]
+        suffix = 2
+        while candidate in existing:
+            ending = f"_{suffix}"
+            candidate = f"{base[: 64 - len(ending)]}{ending}"
+            suffix += 1
+        return candidate
+
+    # :: ARRAY<STRING, object> -> NONE
+    # Assigns z-index values so the top row composites last
+    def _normalizeLayerOrder(self, data: dict[str, object]) -> None:
+        layers = data["layers"]
+        layerCount = len(layers)
+        for layerIndex, layer in enumerate(layers):
+            layer["z_index"] = layerCount - layerIndex - 1
+
+    # :: VOID -> NONE
+    # Updates layer operation availability from selection and layer count
+    def _updateLayerActions(self) -> None:
+        layerCount = len(self._project.layers)
+        self._addLayerButton.setEnabled(layerCount < 32)
+        self._duplicateLayerButton.setEnabled(layerCount < 32)
+        self._moveUpButton.setEnabled(self._selectedLayerIndex > 0)
+        self._moveDownButton.setEnabled(self._selectedLayerIndex < layerCount - 1)
+        self._deleteLayerButton.setEnabled(layerCount > 1)
 
     # :: VOID -> NONE
     # Starts a clean default project after confirming unsaved changes
@@ -512,7 +624,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save Failed", str(error))
             return False
         self._runtime.updateProject(self._project, False)
-        self._inspector.setProject(self._project)
+        self._inspector.setProject(self._project, self._selectedLayerIndex)
         self._setDirty(False)
         self.statusBar().showMessage(f"Saved {self._projectPath}", 5000)
         return True
@@ -556,6 +668,7 @@ class MainWindow(QMainWindow):
         self._pausePreview()
         self._project = project
         self._projectPath = path.resolve() if path else None
+        self._selectedLayerIndex = 0
         self._runtime = ProjectRuntime(project)
         self._frameIndex = 0
         self._configureTimer()

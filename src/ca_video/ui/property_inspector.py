@@ -98,6 +98,7 @@ class PropertyInspector(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._project: ProjectConfig | None = None
+        self._layerIndex = 0
         self._loading = False
         self._textTimer = QTimer(self)
         self._textTimer.setSingleShot(True)
@@ -109,12 +110,13 @@ class PropertyInspector(QWidget):
     # Instance Methods
     #
 
-    # :: projectConfig -> NONE
+    # :: projectConfig, INT -> NONE
     # Loads project values without reporting edits
-    def setProject(self, project: ProjectConfig) -> None:
+    def setProject(self, project: ProjectConfig, layerIndex: int = 0) -> None:
         self._loading = True
         self._project = project
-        layer = project.layer
+        self._layerIndex = layerIndex
+        layer = project.layers[layerIndex]
         initial = layer.initial
 
         self._projectName.setText(project.name)
@@ -167,7 +169,7 @@ class PropertyInspector(QWidget):
         projectData = data["project"]
         outputData = data["output"]
         canvasData = data["canvas"]
-        layerData = data["layers"][0]
+        layerData = data["layers"][self._layerIndex]
         simulationData = layerData["simulation"]
 
         projectData["name"] = self._projectName.text().strip()

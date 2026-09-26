@@ -4,6 +4,7 @@ import numpy as np  # Create and transform RGB frame buffers
 from numpy.typing import NDArray  # Describe NumPy array types
 
 RGBFrame = NDArray[np.uint8]
+RGBAFrame = NDArray[np.float32]
 
 
 # Converts a two-dimensional cell grid into an exact-size RGB frame
@@ -36,6 +37,14 @@ class Renderer2D:
     # :: grid -> rgbFrame
     # Renders the supplied cell grid to an RGB frame
     def render(self, grid: NDArray[np.uint8]) -> RGBFrame:
+        layer = self.renderLayer(grid)
+        alpha = layer[..., 3:4]
+        frame = self._background * (1.0 - alpha) + layer[..., :3] * alpha
+        return frame.clip(0, 255).astype(np.uint8)
+
+    # :: grid -> rgbaFrame
+    # Renders transparent color and alpha for project composition
+    def renderLayer(self, grid: NDArray[np.uint8]) -> RGBAFrame:
         gridHeight, gridWidth = grid.shape
         if self._layout == "cover":
             scale = max(self._width / gridWidth, self._height / gridHeight)
@@ -45,15 +54,14 @@ class Renderer2D:
         renderHeight = max(1, int(round(gridHeight * scale)))
         resized = self._resizeNearest(grid, renderWidth, renderHeight)
 
-        layer = np.empty((renderHeight, renderWidth, 3), dtype=np.float32)
-        layer[:] = self._background
         intensity = np.zeros(resized.shape, dtype=np.float32)
         intensity[resized == 1] = 1.0
         if self._states > 2:
             decaying = resized >= 2
             intensity[decaying] = (self._states - resized[decaying]) / (self._states - 1)
-        alpha = intensity[..., None] * self._opacity
-        layer = self._background * (1.0 - alpha) + self._liveColor * alpha
+        layer = np.empty((renderHeight, renderWidth, 4), dtype=np.float32)
+        layer[..., :3] = self._liveColor
+        layer[..., 3] = intensity * self._opacity
 
         if self._layout == "cover":
             offsetX = max(0, (renderWidth - self._width) // 2)
@@ -61,14 +69,13 @@ class Renderer2D:
             return layer[
                 offsetY : offsetY + self._height,
                 offsetX : offsetX + self._width,
-            ].clip(0, 255).astype(np.uint8)
+            ]
 
-        frame = np.empty((self._height, self._width, 3), dtype=np.float32)
-        frame[:] = self._background
+        frame = np.zeros((self._height, self._width, 4), dtype=np.float32)
         offsetX = (self._width - renderWidth) // 2
         offsetY = (self._height - renderHeight) // 2
         frame[offsetY : offsetY + renderHeight, offsetX : offsetX + renderWidth] = layer
-        return frame.clip(0, 255).astype(np.uint8)
+        return frame
 
     #
     # Protected Methods

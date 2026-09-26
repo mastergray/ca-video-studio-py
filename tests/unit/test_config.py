@@ -68,3 +68,20 @@ def test_initializer_must_fit_the_grid() -> None:
     }
     with pytest.raises(ConfigError, match="too large"):
         parseProject(data)
+
+
+def test_multiple_layers_round_trip_and_require_unique_ids() -> None:
+    data = defaultProject().toDict()
+    second = json.loads(json.dumps(data["layers"][0]))
+    second["id"] = "second"
+    second["name"] = "Second Layer"
+    second["z_index"] = 1
+    data["layers"].append(second)
+
+    project = parseProject(data)
+    assert [layer.id for layer in project.layers] == ["life", "second"]
+    assert len(parseProject(project.toDict()).layers) == 2
+
+    data["layers"][1]["id"] = "life"
+    with pytest.raises(ConfigError, match="unique"):
+        parseProject(data)

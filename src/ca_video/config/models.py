@@ -411,7 +411,7 @@ class Layer2DConfig:
 # Stores a fully validated project configuration
 class ProjectConfig:
 
-    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layer2DConfig, path -> projectConfig
+    # CONSTRUCTOR :: INT, STRING, INT, outputConfig, (INT, INT, INT), layer2DConfig|(layer2DConfig), path -> projectConfig
     # Creates immutable-by-convention project settings
     def __init__(
         self,
@@ -420,7 +420,7 @@ class ProjectConfig:
         seed: int,
         output: OutputConfig,
         canvasBackground: tuple[int, int, int],
-        layer: Layer2DConfig,
+        layers: Layer2DConfig | tuple[Layer2DConfig, ...] | list[Layer2DConfig],
         baseDir: Path,
     ) -> None:
         self._schemaVersion = schemaVersion
@@ -428,7 +428,9 @@ class ProjectConfig:
         self._seed = seed
         self._output = output
         self._canvasBackground = canvasBackground
-        self._layer = layer
+        self._layers = (layers,) if isinstance(layers, Layer2DConfig) else tuple(layers)
+        if not self._layers:
+            raise ConfigError("a project requires at least one layer")
         self._baseDir = baseDir
 
     #
@@ -469,7 +471,13 @@ class ProjectConfig:
     # Returns the configured layer
     @property
     def layer(self) -> Layer2DConfig:
-        return self._layer
+        return self._layers[0]
+
+    # PROPERTY :: VOID -> (layer2DConfig)
+    # Returns all configured layers in editor order
+    @property
+    def layers(self) -> tuple[Layer2DConfig, ...]:
+        return self._layers
 
     # PROPERTY :: VOID -> path
     # Returns the project-relative base directory
@@ -496,37 +504,13 @@ class ProjectConfig:
             self._seed,
             self._output.withOverrides(path=path),
             self._canvasBackground,
-            self._layer,
+            self._layers,
             self._baseDir,
         )
 
     # :: VOID -> ARRAY<STRING, ANY>
     # Serializes the normalized project schema
     def toDict(self) -> dict[str, Any]:
-        initial = self._layer.initial
-        initialData: dict[str, Any] = {"type": initial.type}
-        if initial.type in {"random", "center_block", "disc"}:
-            initialData["density"] = initial.density
-        if initial.type in {"center_block", "disc"}:
-            if initial.size is not None and initial.type == "center_block":
-                initialData["size"] = list(initial.size)
-            else:
-                initialData["radius"] = initial.radius
-        if initial.type == "cells":
-            initialData["origin"] = initial.origin
-            initialData["cells"] = [list(cell) for cell in initial.cells]
-        if initial.type == "rle":
-            initialData["origin"] = initial.origin
-            if initial.rleData is not None:
-                initialData["data"] = initial.rleData
-            elif initial.rlePath is not None:
-                initialData["path"] = str(initial.rlePath)
-
-        ruleData = (
-            {"preset": self._layer.rulePreset}
-            if self._layer.rulePreset is not None
-            else {"notation": self._layer.rule.notation, "neighborhood": self._layer.rule.neighborhood}
-        )
         return {
             "schema_version": self._schemaVersion,
             "project": {"name": self._name, "seed": self._seed},
@@ -541,32 +525,59 @@ class ProjectConfig:
                 "encoder_preset": self._output.encoderPreset,
             },
             "canvas": {"background": colorToHex(self._canvasBackground)},
-            "layers": [
-                {
-                    "id": self._layer.id,
-                    "name": self._layer.name,
-                    "enabled": self._layer.enabled,
-                    "dimension": "2d",
-                    "z_index": self._layer.zIndex,
-                    "opacity": self._layer.opacity,
-                    "step_interval_ms": self._layer.stepIntervalMs,
-                    "simulation": {
-                        "mode": "outer_totalistic",
-                        "grid": {
-                            "size": [self._layer.gridWidth, self._layer.gridHeight],
-                            "boundary": self._layer.boundary,
-                        },
-                        "rule": ruleData,
-                        "initial": initialData,
-                    },
-                    "render": {
-                        "style": "cells",
-                        "color": colorToHex(self._layer.liveColor),
-                        "layout": self._layer.layout,
-                    },
-                }
-            ],
+            "layers": [_layerToDict(layer) for layer in self._layers],
         }
+
+
+# :: layer2DConfig -> ARRAY<STRING, ANY>
+# Serializes one normalized two-dimensional layer
+def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
+    initial = layer.initial
+    initialData: dict[str, Any] = {"type": initial.type}
+    if initial.type in {"random", "center_block", "disc"}:
+        initialData["density"] = initial.density
+    if initial.type in {"center_block", "disc"}:
+        if initial.size is not None and initial.type == "center_block":
+            initialData["size"] = list(initial.size)
+        else:
+            initialData["radius"] = initial.radius
+    if initial.type == "cells":
+        initialData["origin"] = initial.origin
+        initialData["cells"] = [list(cell) for cell in initial.cells]
+    if initial.type == "rle":
+        initialData["origin"] = initial.origin
+        if initial.rleData is not None:
+            initialData["data"] = initial.rleData
+        elif initial.rlePath is not None:
+            initialData["path"] = str(initial.rlePath)
+    ruleData = (
+        {"preset": layer.rulePreset}
+        if layer.rulePreset is not None
+        else {"notation": layer.rule.notation, "neighborhood": layer.rule.neighborhood}
+    )
+    return {
+        "id": layer.id,
+        "name": layer.name,
+        "enabled": layer.enabled,
+        "dimension": "2d",
+        "z_index": layer.zIndex,
+        "opacity": layer.opacity,
+        "step_interval_ms": layer.stepIntervalMs,
+        "simulation": {
+            "mode": "outer_totalistic",
+            "grid": {
+                "size": [layer.gridWidth, layer.gridHeight],
+                "boundary": layer.boundary,
+            },
+            "rule": ruleData,
+            "initial": initialData,
+        },
+        "render": {
+            "style": "cells",
+            "color": colorToHex(layer.liveColor),
+            "layout": layer.layout,
+        },
+    }
 
 
 # :: ARRAY<STRING, ANY>, path? -> projectConfig
@@ -617,8 +628,8 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     background = _asColor(canvas.get("background", "#0d1117"), "canvas.background")
 
     layers = root.get("layers")
-    if not isinstance(layers, list) or len(layers) != 1:
-        raise ConfigError("the current milestone requires exactly one layer")
+    if not isinstance(layers, list) or not 1 <= len(layers) <= 32:
+        raise ConfigError("project.layers must contain between 1 and 32 layers")
     layerData = _asMapping(layers[0], "layers[0]")
     _rejectUnknown(
         layerData,
@@ -792,7 +803,27 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         rulePreset,
         initial,
     )
-    return ProjectConfig(schemaVersion, name.strip(), seed, output, background, layer, resolvedBaseDir)
+    parsedLayers = [layer]
+    for layerIndex, extraLayerData in enumerate(layers[1:], 1):
+        extraProjectData = dict(root)
+        extraProjectData["layers"] = [extraLayerData]
+        try:
+            parsedLayers.append(parseProject(extraProjectData, resolvedBaseDir).layer)
+        except ConfigError as error:
+            message = str(error).replace("layers[0]", f"layers[{layerIndex}]")
+            raise ConfigError(message) from error
+    layerIds = [parsedLayer.id for parsedLayer in parsedLayers]
+    if len(layerIds) != len(set(layerIds)):
+        raise ConfigError("layer IDs must be unique")
+    return ProjectConfig(
+        schemaVersion,
+        name.strip(),
+        seed,
+        output,
+        background,
+        tuple(parsedLayers),
+        resolvedBaseDir,
+    )
 
 
 # :: STRING|path -> projectConfig

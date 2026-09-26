@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Layered Life",
+    "seed": 27
+  },
+  "output": {
+    "path": "../renders/layered-life.mp4",
+    "width": 640,
+    "height": 360,
+    "fps": 30,
+    "duration_seconds": 5,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#080b12"
+  },
+  "layers": [
+    {
+      "id": "highlife_glow",
+      "name": "HighLife Glow",
+      "enabled": true,
+      "dimension": "2d",
+      "z_index": 1,
+      "opacity": 0.8,
+      "step_interval_ms": 80,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "size": [160, 90],
+          "boundary": "wrap"
+        },
+        "rule": {
+          "preset": "highlife"
+        },
+        "initial": {
+          "type": "random",
+          "density": 0.16
+        }
+      },
+      "render": {
+        "style": "cells",
+        "color": "#42e8df",
+        "layout": "fit"
+      }
+    },
+    {
+      "id": "daynight_field",
+      "name": "Day & Night Field",
+      "enabled": true,
+      "dimension": "2d",
+      "z_index": 0,
+      "opacity": 0.55,
+      "step_interval_ms": 180,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "size": [80, 45],
+          "boundary": "wrap"
+        },
+        "rule": {
+          "preset": "daynight"
+        },
+        "initial": {
+          "type": "random",
+          "density": 0.32
+        }
+      },
+      "render": {
+        "style": "cells",
+        "color": "#815acb",
+        "layout": "fit"
+      }
+    }
+  ]
+}

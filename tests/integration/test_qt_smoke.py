@@ -71,3 +71,25 @@ def test_preview_only_mode_restores_editor_panes() -> None:
     assert window._layerPanel.isVisible()
     assert window.inspector.isVisible()
     window.close()
+
+
+def test_layer_controls_add_duplicate_reorder_and_delete() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+
+    window._addLayer()
+    assert len(window.project.layers) == 2
+    assert len({layer.id for layer in window.project.layers}) == 2
+    assert window.project.layers[0].zIndex > window.project.layers[1].zIndex
+
+    window._duplicateLayer()
+    assert len(window.project.layers) == 3
+    window._moveLayer(1)
+    assert window._selectedLayerIndex == 1
+    assert window.project.layers[0].zIndex > window.project.layers[1].zIndex
+
+    window._deleteLayer()
+    app.processEvents()
+    assert len(window.project.layers) == 2
+    window._setDirty(False)
+    window.close()

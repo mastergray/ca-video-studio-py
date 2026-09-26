@@ -2,10 +2,10 @@
 
 Native Python/PySide6 application for previewing and exporting deterministic cellular-automata videos.
 
-The current editable milestone supports one deterministic 2D layer, the complete
-reference 2D rule catalog, custom B/S/C rules, multiple initial-condition types,
-native project editing and persistence, preview controls, and H.264 MP4 export
-through FFmpeg. The broader product is defined in
+The current editable milestone supports ordered deterministic 2D layers with
+independent rules and timing, the complete reference 2D rule catalog, custom
+B/S/C rules, multiple initial-condition types, native project editing and
+persistence, preview controls, and H.264 MP4 export through FFmpeg. The broader product is defined in
 [`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
 in [`docs/native-ui-design.md`](docs/native-ui-design.md).
 
@@ -26,6 +26,12 @@ Open the example project:
 
 ```bash
 uv run ca-video gui examples/life.cav.json
+```
+
+Open the layered example:
+
+```bash
+uv run ca-video gui examples/layered-life.cav.json
 ```
 
 Validate or render without the GUI:

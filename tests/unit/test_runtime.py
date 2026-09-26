@@ -1,6 +1,6 @@
 import numpy as np  # Compare rendered frame buffers
 
-from ca_video.config.models import defaultProject  # Create deterministic test projects
+from ca_video.config.models import defaultProject, parseProject  # Create deterministic test projects
 from ca_video.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
 
 
@@ -22,3 +22,38 @@ def test_reset_reproduces_initial_frame() -> None:
     runtime.renderFrame(60)
     runtime.reset()
     np.testing.assert_array_equal(runtime.renderFrame(0), initial)
+
+
+def test_layers_advance_on_independent_clocks() -> None:
+    data = defaultProject().toDict()
+    second = defaultProject().toDict()["layers"][0]
+    second["id"] = "slow"
+    second["step_interval_ms"] = 200
+    data["layers"].append(second)
+    runtime = ProjectRuntime(parseProject(data))
+
+    runtime.renderFrame(3)
+
+    assert runtime.engineForLayer(0).generation == 1
+    assert runtime.engineForLayer(1).generation == 0
+
+
+def test_higher_z_index_composites_last() -> None:
+    data = defaultProject().toDict()
+    data["output"].update({"width": 320, "height": 180})
+    data["canvas"]["background"] = "#000000"
+    top = data["layers"][0]
+    top.update({"id": "top", "z_index": 1, "opacity": 1})
+    top["simulation"]["grid"] = {"size": [16, 9], "boundary": "fixed"}
+    top["simulation"]["initial"] = {"type": "cells", "origin": "absolute", "cells": [[8, 4]]}
+    top["render"].update({"color": "#ff0000", "layout": "fit"})
+    bottom = defaultProject().toDict()["layers"][0]
+    bottom.update({"id": "bottom", "z_index": 0, "opacity": 1})
+    bottom["simulation"]["grid"] = {"size": [16, 9], "boundary": "fixed"}
+    bottom["simulation"]["initial"] = {"type": "cells", "origin": "absolute", "cells": [[8, 4]]}
+    bottom["render"].update({"color": "#0000ff", "layout": "fit"})
+    data["layers"] = [top, bottom]
+
+    frame = ProjectRuntime(parseProject(data)).renderFrame(0)
+
+    np.testing.assert_array_equal(frame[90, 170], np.array([255, 0, 0], dtype=np.uint8))
