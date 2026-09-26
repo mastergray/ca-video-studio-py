@@ -15,7 +15,7 @@ from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S
 # Derives a stable per-layer seed without Python's randomized hash function
 def stableLayerSeed(masterSeed: int, layerId: str) -> int:
     payload = f"ca-video-v1:{masterSeed}:{layerId}".encode()
-    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big")
+    return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & (2**63 - 1)
 
 
 # Coordinates independent simulations and ordered alpha composition
@@ -133,7 +133,7 @@ class ProjectRuntime:
             initial.type,
             initial.density,
             initial.radius,
-            stableLayerSeed(self._project.seed, layer.id),
+            layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id),
             initial.size,
             initial.cells,
             initial.origin,

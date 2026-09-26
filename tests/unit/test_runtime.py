@@ -57,3 +57,27 @@ def test_higher_z_index_composites_last() -> None:
     frame = ProjectRuntime(parseProject(data)).renderFrame(0)
 
     np.testing.assert_array_equal(frame[90, 170], np.array([255, 0, 0], dtype=np.uint8))
+
+
+def test_layer_seed_override_is_independent_of_project_seed() -> None:
+    firstData = defaultProject().toDict()
+    firstData["layers"][0]["seed"] = 12345
+    secondData = defaultProject().toDict()
+    secondData["project"]["seed"] = 999
+    secondData["layers"][0]["seed"] = 12345
+
+    first = ProjectRuntime(parseProject(firstData))
+    second = ProjectRuntime(parseProject(secondData))
+
+    np.testing.assert_array_equal(first.engine.grid, second.engine.grid)
+
+
+def test_derived_layer_seed_changes_with_project_seed() -> None:
+    firstData = defaultProject().toDict()
+    secondData = defaultProject().toDict()
+    secondData["project"]["seed"] = firstData["project"]["seed"] + 1
+
+    first = ProjectRuntime(parseProject(firstData))
+    second = ProjectRuntime(parseProject(secondData))
+
+    assert not np.array_equal(first.engine.grid, second.engine.grid)

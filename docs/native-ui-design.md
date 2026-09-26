@@ -224,7 +224,8 @@ The inspector has two top-level tabs.
 
 **Layer** operates on the selected layer and contains collapsible sections:
 
-- **General:** name, enabled, dimension/type, and order.
+- **General:** name, enabled, dimension/type, order, Derived/Custom seed mode,
+  and the resolved layer seed.
 - **Simulation:** rule family, catalog rule or custom rule, neighborhood,
   boundary, and number of states.
 - **Initial Condition:** initializer type, seed override, and
@@ -390,4 +391,3 @@ choose an initial condition, change its visual and output settings, preview it,
 save it, reopen it without loss, and render a valid MP4. The layout must remain
 usable at 1280×720 and preview-only mode must restore the previous editor layout
 when exited.
-

@@ -85,3 +85,15 @@ def test_multiple_layers_round_trip_and_require_unique_ids() -> None:
     data["layers"][1]["id"] = "life"
     with pytest.raises(ConfigError, match="unique"):
         parseProject(data)
+
+
+def test_optional_layer_seed_round_trips_and_is_bounded() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["seed"] = 9_223_372_036_854_775_807
+    project = parseProject(data)
+    assert project.layer.seed == 9_223_372_036_854_775_807
+    assert project.toDict()["layers"][0]["seed"] == 9_223_372_036_854_775_807
+
+    data["layers"][0]["seed"] += 1
+    with pytest.raises(ConfigError, match="between 0"):
+        parseProject(data)

@@ -49,6 +49,7 @@
     {
       "id": "daynight_field",
       "name": "Day & Night Field",
+      "seed": 9001,
       "enabled": true,
       "dimension": "2d",
       "z_index": 0,

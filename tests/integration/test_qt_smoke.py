@@ -93,3 +93,19 @@ def test_layer_controls_add_duplicate_reorder_and_delete() -> None:
     assert len(window.project.layers) == 2
     window._setDirty(False)
     window.close()
+
+
+def test_layer_seed_can_switch_from_derived_to_custom() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    inspector = window.inspector
+
+    inspector._layerSeedMode.setCurrentIndex(inspector._layerSeedMode.findData("custom"))
+    inspector._layerSeed.setText("424242")
+    inspector._layerSeed.editingFinished.emit()
+    app.processEvents()
+
+    assert window.project.layer.seed == 424242
+    assert inspector._resolvedSeed.text() == "424242"
+    window._setDirty(False)
+    window.close()

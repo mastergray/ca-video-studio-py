@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (  # Build the project and layer inspector forms
 
 from ca_video.catalogs.rules_2d import ruleCatalog  # Populate categorized rule choices
 from ca_video.config.models import ProjectConfig, colorToHex  # Present normalized project values
+from ca_video.services.runtime import stableLayerSeed  # Display deterministic derived layer seeds
 
 RESOLUTIONS = ((640, 360), (960, 540), (1280, 720), (1920, 1080))
 FPS_VALUES = (24, 25, 30, 50, 60)
@@ -120,7 +121,7 @@ class PropertyInspector(QWidget):
         initial = layer.initial
 
         self._projectName.setText(project.name)
-        self._projectSeed.setValue(min(project.seed, self._projectSeed.maximum()))
+        self._projectSeed.setText(str(project.seed))
         resolutionIndex = self._resolution.findData((project.output.width, project.output.height))
         self._resolution.setCurrentIndex(max(0, resolutionIndex))
         fpsIndex = self._fps.findData(project.output.fps)
@@ -129,6 +130,10 @@ class PropertyInspector(QWidget):
         self._backgroundColor.setColor(colorToHex(project.canvasBackground))
 
         self._layerName.setText(layer.name)
+        seedModeIndex = self._layerSeedMode.findData("custom" if layer.seed is not None else "derived")
+        self._layerSeedMode.setCurrentIndex(max(0, seedModeIndex))
+        resolvedSeed = layer.seed if layer.seed is not None else stableLayerSeed(project.seed, layer.id)
+        self._layerSeed.setText(str(resolvedSeed))
         ruleIndex = self._rulePreset.findData(layer.rulePreset or "custom")
         self._rulePreset.setCurrentIndex(max(0, ruleIndex))
         self._customNotation.setText(layer.rule.notation)
@@ -158,6 +163,8 @@ class PropertyInspector(QWidget):
         self._stepInterval.setValue(layer.stepIntervalMs)
         self._syncRuleControls()
         self._syncInitialControls()
+        self._syncSeedControls()
+        self._updateResolvedSeed()
         self._loading = False
 
     # :: VOID -> ARRAY<STRING, ANY>
@@ -173,7 +180,7 @@ class PropertyInspector(QWidget):
         simulationData = layerData["simulation"]
 
         projectData["name"] = self._projectName.text().strip()
-        projectData["seed"] = self._projectSeed.value()
+        projectData["seed"] = self._seedValue(self._projectSeed, "Project seed")
         width, height = self._resolution.currentData()
         outputData["width"] = width
         outputData["height"] = height
@@ -182,6 +189,10 @@ class PropertyInspector(QWidget):
         canvasData["background"] = self._backgroundColor.color
 
         layerData["name"] = self._layerName.text().strip()
+        if self._layerSeedMode.currentData() == "custom":
+            layerData["seed"] = self._seedValue(self._layerSeed, "Layer seed")
+        else:
+            layerData.pop("seed", None)
         ruleKey = self._rulePreset.currentData()
         simulationData["rule"] = (
             {"notation": self._customNotation.text().strip(), "neighborhood": self._neighborhood.currentData()}
@@ -220,8 +231,19 @@ class PropertyInspector(QWidget):
 
         general = QGroupBox("General")
         generalForm = QFormLayout(general)
+        self._generalForm = generalForm
         self._layerName = QLineEdit()
+        self._layerSeedMode = QComboBox()
+        self._layerSeedMode.addItem("Derived from project", "derived")
+        self._layerSeedMode.addItem("Custom", "custom")
+        self._layerSeed = QLineEdit()
+        self._layerSeed.setPlaceholderText("0 to 9223372036854775807")
+        self._resolvedSeed = QLabel()
+        self._resolvedSeed.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         generalForm.addRow("Name", self._layerName)
+        generalForm.addRow("Seed source", self._layerSeedMode)
+        generalForm.addRow("Layer seed", self._layerSeed)
+        generalForm.addRow("Resolved seed", self._resolvedSeed)
         layout.addWidget(general)
 
         simulation = QGroupBox("Simulation")
@@ -310,8 +332,10 @@ class PropertyInspector(QWidget):
 
         self._rulePreset.currentIndexChanged.connect(self._ruleChanged)
         self._initialType.currentIndexChanged.connect(self._initialChanged)
+        self._layerSeedMode.currentIndexChanged.connect(self._seedModeChanged)
         self._connectLineEdit(self._layerName, True)
         self._connectLineEdit(self._customNotation, True)
+        self._layerSeed.editingFinished.connect(self._layerSeedEdited)
         for control in (
             self._neighborhood,
             self._gridWidth,
@@ -340,7 +364,8 @@ class PropertyInspector(QWidget):
         projectGroup = QGroupBox("Project")
         projectForm = QFormLayout(projectGroup)
         self._projectName = QLineEdit()
-        self._projectSeed = self._spinBox(0, 2_147_483_647)
+        self._projectSeed = QLineEdit()
+        self._projectSeed.setPlaceholderText("0 to 9223372036854775807")
         projectForm.addRow("Name", self._projectName)
         projectForm.addRow("Random seed", self._projectSeed)
         layout.addWidget(projectGroup)
@@ -374,7 +399,7 @@ class PropertyInspector(QWidget):
         layout.addStretch(1)
 
         self._connectLineEdit(self._projectName, False)
-        self._projectSeed.valueChanged.connect(lambda _value: self._emitChange(True))
+        self._projectSeed.editingFinished.connect(self._projectSeedEdited)
         self._resolution.currentIndexChanged.connect(lambda _value: self._emitChange(False))
         self._fps.currentIndexChanged.connect(lambda _value: self._emitChange(False))
         self._duration.valueChanged.connect(lambda _value: self._emitChange(False))
@@ -424,6 +449,48 @@ class PropertyInspector(QWidget):
         self._setFieldVisible(self._simulationForm, self._neighborhood, custom)
 
     # :: VOID -> NONE
+    # Shows a custom seed editor only when override mode is selected
+    def _syncSeedControls(self) -> None:
+        custom = self._layerSeedMode.currentData() == "custom"
+        self._setFieldVisible(self._generalForm, self._layerSeed, custom)
+
+    # :: VOID -> NONE
+    # Applies a seed-source change and resets the selected simulation
+    def _seedModeChanged(self) -> None:
+        self._syncSeedControls()
+        self._updateResolvedSeed()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Applies a custom layer seed edit
+    def _layerSeedEdited(self) -> None:
+        self._updateResolvedSeed()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Applies a global project seed edit
+    def _projectSeedEdited(self) -> None:
+        self._updateResolvedSeed()
+        self._emitChange(True)
+
+    # :: VOID -> NONE
+    # Displays the exact seed used by the selected layer
+    def _updateResolvedSeed(self) -> None:
+        if self._project is None:
+            return
+        try:
+            projectSeed = self._seedValue(self._projectSeed, "Project seed")
+            if self._layerSeedMode.currentData() == "custom":
+                resolvedSeed = self._seedValue(self._layerSeed, "Layer seed")
+            else:
+                layerId = self._project.layers[self._layerIndex].id
+                resolvedSeed = stableLayerSeed(projectSeed, layerId)
+        except ValueError:
+            self._resolvedSeed.setText("Invalid seed")
+            return
+        self._resolvedSeed.setText(str(resolvedSeed))
+
+    # :: VOID -> NONE
     # Handles an initializer selection and publishes it
     def _initialChanged(self) -> None:
         self._syncInitialControls()
@@ -450,6 +517,17 @@ class PropertyInspector(QWidget):
         if label is not None:
             label.setVisible(visible)
         field.setVisible(visible)
+
+    # :: lineEdit, STRING -> INT
+    # Parses a seed field across the full supported 63-bit range
+    def _seedValue(self, control: QLineEdit, label: str) -> int:
+        value = control.text().strip()
+        if not value.isdigit():
+            raise ValueError(f"{label} must be a non-negative integer")
+        seed = int(value)
+        if seed > 2**63 - 1:
+            raise ValueError(f"{label} must be no greater than 9223372036854775807")
+        return seed
 
     # :: VOID -> ARRAY<STRING, ANY>
     # Builds the selected initializer mapping

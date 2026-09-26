@@ -4,8 +4,9 @@ Native Python/PySide6 application for previewing and exporting deterministic cel
 
 The current editable milestone supports ordered deterministic 2D layers with
 independent rules and timing, the complete reference 2D rule catalog, custom
-B/S/C rules, multiple initial-condition types, native project editing and
-persistence, preview controls, and H.264 MP4 export through FFmpeg. The broader product is defined in
+B/S/C rules, global and optional per-layer seeds, multiple initial-condition
+types, native project editing and persistence, preview controls, and H.264 MP4
+export through FFmpeg. The broader product is defined in
 [`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
 in [`docs/native-ui-design.md`](docs/native-ui-design.md).
 

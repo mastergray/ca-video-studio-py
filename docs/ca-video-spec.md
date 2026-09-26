@@ -180,6 +180,10 @@ During a start hold, simulation and camera motion are frozen. During an end hold
 
 - Every project has a required integer master seed in the range 0 through `2^63 - 1`.
 - Each layer derives an independent random stream from the master seed and stable layer ID.
+- A layer may set an optional integer `seed` override in the same range. When
+  present, that exact seed replaces derivation from the project seed.
+- The editor exposes Derived and Custom seed modes and displays the resolved
+  seed used by the selected layer.
 - Random stream derivation must not use Python's process-randomized `hash()`.
 - Initialization and any render sampling consume documented streams in a stable order.
 - Preview Reset returns the layer to the same initial state.
@@ -295,6 +299,8 @@ Each layer has:
 - Stable list position as the tie-breaker for equal `z_index`.
 - `opacity` from 0 through 1.
 - `step_interval_ms`, minimum 1.
+- Optional `seed` override; when omitted, the seed is derived from the project
+  master seed and stable layer ID.
 - `simulation` configuration.
 - `render` configuration.
 

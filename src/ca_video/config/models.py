@@ -277,7 +277,7 @@ class Initial2DConfig:
 # Stores validated settings for the milestone's single 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig? -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT? -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -296,6 +296,7 @@ class Layer2DConfig:
         rule: OuterTotalisticRule | None = None,
         rulePreset: str | None = "life",
         initial: Initial2DConfig | None = None,
+        seed: int | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -312,6 +313,7 @@ class Layer2DConfig:
         self._rule = rule or parseRule("B3/S23")
         self._rulePreset = rulePreset
         self._initial = initial or Initial2DConfig("random", initialDensity)
+        self._seed = seed
 
     #
     # Properties
@@ -406,6 +408,12 @@ class Layer2DConfig:
     @property
     def initial(self) -> Initial2DConfig:
         return self._initial
+
+    # PROPERTY :: VOID -> INT?
+    # Returns the explicit layer seed or None when it is derived
+    @property
+    def seed(self) -> int | None:
+        return self._seed
 
 
 # Stores a fully validated project configuration
@@ -558,6 +566,7 @@ def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
     return {
         "id": layer.id,
         "name": layer.name,
+        **({"seed": layer.seed} if layer.seed is not None else {}),
         "enabled": layer.enabled,
         "dimension": "2d",
         "z_index": layer.zIndex,
@@ -633,7 +642,18 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     layerData = _asMapping(layers[0], "layers[0]")
     _rejectUnknown(
         layerData,
-        {"id", "name", "enabled", "dimension", "z_index", "opacity", "step_interval_ms", "simulation", "render"},
+        {
+            "id",
+            "name",
+            "seed",
+            "enabled",
+            "dimension",
+            "z_index",
+            "opacity",
+            "step_interval_ms",
+            "simulation",
+            "render",
+        },
         "layers[0]",
     )
     layerId = layerData.get("id")
@@ -642,6 +662,11 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     layerName = layerData.get("name", layerId)
     if not isinstance(layerName, str) or not layerName.strip():
         raise ConfigError("layers[0].name must be a non-empty string")
+    layerSeed = (
+        _asInteger(layerData.get("seed"), "layers[0].seed", 0, 2**63 - 1)
+        if "seed" in layerData
+        else None
+    )
     enabled = layerData.get("enabled", True)
     if not isinstance(enabled, bool):
         raise ConfigError("layers[0].enabled must be true or false")
@@ -802,6 +827,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         parsedRule,
         rulePreset,
         initial,
+        layerSeed,
     )
     parsedLayers = [layer]
     for layerIndex, extraLayerData in enumerate(layers[1:], 1):
