@@ -1,0 +1,19 @@
+{
+  "dimensions": 3,
+  "size": [48, 48, 48],
+  "rule": "B4/S4-5/C5",
+  "wrap": false,
+  "seed": 1,
+  "steps": 80,
+  "init": { "type": "center", "radius": 3, "density": 0.5 },
+  "video": {
+    "output": "crystal_3d.mp4", "fps": 30, "width": 720, "height": 720,
+    "steps_per_frame": 1, "hold_end_frames": 90
+  },
+  "colors": {
+    "background": "#0d1017",
+    "gradient": ["#7df9ff", "#4c6fff", "#8a2be2", "#3a1450"],
+    "color_by": "distance"
+  },
+  "camera": { "elevation": 25, "rotate_deg_per_frame": 1.0, "perspective": 0.4 }
+}

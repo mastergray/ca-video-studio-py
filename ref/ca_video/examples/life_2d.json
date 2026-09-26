@@ -1,0 +1,15 @@
+{
+  "dimensions": 2,
+  "size": [160, 160],
+  "rule": "B3/S23",
+  "seed": 7,
+  "steps": 300,
+  "init": { "type": "random", "density": 0.32 },
+  "video": { "output": "life_2d.mp4", "fps": 30, "width": 640, "height": 640 },
+  "colors": {
+    "background": "#0b0d12",
+    "gradient": ["#e8f4ff"],
+    "trail": 0.86,
+    "trail_color": "#2f5fb0"
+  }
+}

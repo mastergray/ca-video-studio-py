@@ -1,0 +1,10 @@
+{
+  "dimensions": 2,
+  "size": [200, 200],
+  "rule": "B2/S/C3",
+  "seed": 3,
+  "steps": 300,
+  "init": { "type": "center", "radius": 30, "density": 0.4 },
+  "video": { "output": "brians_brain_2d.mp4", "fps": 30, "width": 800, "height": 800 },
+  "colors": { "background": "#08070d", "gradient": ["#ffd166", "#ef476f"] }
+}

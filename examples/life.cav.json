@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Life — First Light",
+    "seed": 7
+  },
+  "output": {
+    "path": "../renders/life-first-light.mp4",
+    "width": 640,
+    "height": 360,
+    "fps": 30,
+    "duration_seconds": 5,
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#0d1117"
+  },
+  "layers": [
+    {
+      "id": "life",
+      "name": "Conway's Life",
+      "enabled": true,
+      "dimension": "2d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 100,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "size": [160, 90],
+          "boundary": "wrap"
+        },
+        "rule": {
+          "preset": "life"
+        },
+        "initial": {
+          "type": "random",
+          "density": 0.3
+        }
+      },
+      "render": {
+        "style": "cells",
+        "color": "#e8f4ff",
+        "layout": "fit"
+      }
+    }
+  ]
+}

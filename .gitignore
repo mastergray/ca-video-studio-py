@@ -1,0 +1,37 @@
+# AI
+.claude/
+.agents/
+.codex/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment and logs
+.env
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated media and render metadata
+renders/
+*.mp4
+*.render.json
+
+# Superseded reference bundles (expanded sources remain tracked)
+ref/*.zip
