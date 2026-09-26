@@ -366,10 +366,10 @@ Initial shortcuts:
 
 Shortcuts must be suppressed when they conflict with active text editing.
 
-## 9. First editable-UI milestone
+## 9. Editable-UI milestones
 
-The next milestone deliberately targets the implemented 2D engine before the
-full version 1 feature set. It includes:
+The first milestone targeted the implemented 2D engine before the full version
+1 feature set. It included:
 
 1. The three-pane editor shell and preview-only mode.
 2. A single-layer list with enable, select, and future-facing Add controls;
@@ -386,10 +386,15 @@ full version 1 feature set. It includes:
 10. UI and serialization tests for the complete edit-save-open-preview-render
     path.
 
-3D, Wolfram, multi-layer composition, advanced gradients/trails, direct cell
-painting, and arbitrary timeline scrubbing remain visible in the overall
-design but are not required to complete this milestone. Unimplemented controls
-must not be displayed as if they work.
+Multi-layer composition, per-layer seed overrides, export-relative cell sizing,
+and `wolfram_2d` have since been completed. The Wolfram inspector replaces
+outer-totalistic rule controls with a rule-number field from 0 through 255 and
+offers center-cell, seeded-random, and explicit-bit starting rows. The Add Layer
+menu creates either an outer-totalistic 2D layer or a Wolfram 2D history layer.
+
+3D, advanced gradients/trails, direct cell painting, and arbitrary timeline
+scrubbing remain visible in the overall design but are not yet implemented.
+Unimplemented controls must not be displayed as if they work.
 
 ### 9.1 Milestone acceptance
 

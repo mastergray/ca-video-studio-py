@@ -115,3 +115,58 @@ def test_cell_size_grid_round_trips_and_tracks_export_resolution() -> None:
     resized["output"].update({"width": 1920, "height": 1080})
     resizedProject = parseProject(resized)
     assert (resizedProject.layer.gridWidth, resizedProject.layer.gridHeight) == (240, 135)
+
+
+def test_wolfram_layer_round_trips_without_outer_totalistic_fields(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    data["layers"][0]["simulation"] = {
+        "mode": "wolfram_2d",
+        "grid": {"size": [40, 24], "boundary": "wrap"},
+        "rule": {"number": 110},
+        "initial": {"type": "bits", "bits": [1, 0, 1, 1]},
+    }
+    project = parseProject(data, tmp_path)
+    destination = tmp_path / "wolfram.cav.json"
+
+    saved = saveProject(project, destination)
+
+    assert saved.layer.simulationMode == "wolfram_2d"
+    assert saved.layer.wolframRule == 110
+    assert saved.layer.rule is None
+    assert saved.layer.initial.bits == (1, 0, 1, 1)
+    assert saved.toDict()["layers"][0]["simulation"] == data["layers"][0]["simulation"]
+
+
+def test_wolfram_layer_requires_wrapping_and_family_specific_fields() -> None:
+    data = defaultProject().toDict()
+    simulation = data["layers"][0]["simulation"]
+    simulation.update(
+        {
+            "mode": "wolfram_2d",
+            "grid": {"size": [40, 24], "boundary": "fixed"},
+            "rule": {"number": 30},
+            "initial": {"type": "single_center"},
+        }
+    )
+    with pytest.raises(ConfigError, match="wrapped horizontal boundary"):
+        parseProject(data)
+
+    simulation["grid"]["boundary"] = "wrap"
+    simulation["rule"] = {"number": 30, "preset": "life"}
+    with pytest.raises(ConfigError, match="unsupported field"):
+        parseProject(data)
+
+
+def test_wolfram_random_row_defaults_to_half_density() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["simulation"] = {
+        "mode": "wolfram_2d",
+        "grid": {"size": [40, 24], "boundary": "wrap"},
+        "rule": {"number": 90},
+        "initial": {"type": "random"},
+    }
+
+    project = parseProject(data)
+
+    assert project.layer.initial.density == 0.5
+    assert project.toDict()["layers"][0]["simulation"]["initial"]["density"] == 0.5

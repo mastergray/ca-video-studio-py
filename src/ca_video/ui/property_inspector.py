@@ -134,11 +134,15 @@ class PropertyInspector(QWidget):
         self._layerSeedMode.setCurrentIndex(max(0, seedModeIndex))
         resolvedSeed = layer.seed if layer.seed is not None else stableLayerSeed(project.seed, layer.id)
         self._layerSeed.setText(str(resolvedSeed))
-        ruleIndex = self._rulePreset.findData(layer.rulePreset or "custom")
-        self._rulePreset.setCurrentIndex(max(0, ruleIndex))
-        self._customNotation.setText(layer.rule.notation)
-        neighborhoodIndex = self._neighborhood.findData(layer.rule.neighborhood)
-        self._neighborhood.setCurrentIndex(max(0, neighborhoodIndex))
+        modeIndex = self._simulationMode.findData(layer.simulationMode)
+        self._simulationMode.setCurrentIndex(max(0, modeIndex))
+        self._wolframRule.setValue(layer.wolframRule if layer.wolframRule is not None else 30)
+        if layer.rule is not None:
+            ruleIndex = self._rulePreset.findData(layer.rulePreset or "custom")
+            self._rulePreset.setCurrentIndex(max(0, ruleIndex))
+            self._customNotation.setText(layer.rule.notation)
+            neighborhoodIndex = self._neighborhood.findData(layer.rule.neighborhood)
+            self._neighborhood.setCurrentIndex(max(0, neighborhoodIndex))
         gridModeIndex = self._gridMode.findData("cell_size" if layer.cellSizePx is not None else "size")
         self._gridMode.setCurrentIndex(max(0, gridModeIndex))
         self._gridWidth.setValue(layer.gridWidth)
@@ -146,7 +150,7 @@ class PropertyInspector(QWidget):
         self._cellSize.setValue(layer.cellSizePx or 4)
         self._boundary.setCurrentIndex(max(0, self._boundary.findData(layer.boundary)))
 
-        self._initialType.setCurrentIndex(max(0, self._initialType.findData(initial.type)))
+        self._populateInitialTypes(layer.simulationMode, initial.type)
         self._density.setValue(initial.density)
         self._radius.setValue(initial.radius)
         self._origin.setCurrentIndex(max(0, self._origin.findData(initial.origin)))
@@ -159,12 +163,13 @@ class PropertyInspector(QWidget):
             except OSError:
                 rleText = ""
         self._rle.setPlainText(rleText or "x = 3, y = 3\nbob$2bo$3o!")
+        self._bits.setText("".join(str(bit) for bit in initial.bits) or "1")
 
         self._liveColor.setColor(colorToHex(layer.liveColor))
         self._opacity.setValue(layer.opacity)
         self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
         self._stepInterval.setValue(layer.stepIntervalMs)
-        self._syncRuleControls()
+        self._syncSimulationControls()
         self._syncGridControls()
         self._syncInitialControls()
         self._syncSeedControls()
@@ -197,13 +202,23 @@ class PropertyInspector(QWidget):
             layerData["seed"] = self._seedValue(self._layerSeed, "Layer seed")
         else:
             layerData.pop("seed", None)
-        ruleKey = self._rulePreset.currentData()
-        simulationData["rule"] = (
-            {"notation": self._customNotation.text().strip(), "neighborhood": self._neighborhood.currentData()}
-            if ruleKey == "custom"
-            else {"preset": ruleKey}
-        )
-        gridData = {"boundary": self._boundary.currentData()}
+        simulationMode = self._simulationMode.currentData()
+        simulationData["mode"] = simulationMode
+        if simulationMode == "wolfram_2d":
+            simulationData["rule"] = {"number": self._wolframRule.value()}
+        else:
+            ruleKey = self._rulePreset.currentData()
+            simulationData["rule"] = (
+                {
+                    "notation": self._customNotation.text().strip(),
+                    "neighborhood": self._neighborhood.currentData(),
+                }
+                if ruleKey == "custom"
+                else {"preset": ruleKey}
+            )
+        gridData = {
+            "boundary": "wrap" if simulationMode == "wolfram_2d" else self._boundary.currentData()
+        }
         if self._gridMode.currentData() == "cell_size":
             gridData["cell_size_px"] = self._cellSize.value()
         else:
@@ -255,6 +270,9 @@ class PropertyInspector(QWidget):
         simulation = QGroupBox("Simulation")
         simulationForm = QFormLayout(simulation)
         self._simulationForm = simulationForm
+        self._simulationMode = QComboBox()
+        self._simulationMode.addItem("Outer-totalistic 2D", "outer_totalistic")
+        self._simulationMode.addItem("Wolfram scrolling history", "wolfram_2d")
         self._rulePreset = QComboBox()
         previousCategory = None
         for entry in ruleCatalog():
@@ -267,6 +285,9 @@ class PropertyInspector(QWidget):
         self._rulePreset.addItem("Custom B/S/C rule…", "custom")
         self._customNotation = QLineEdit("B3/S23")
         self._customNotation.setPlaceholderText("B3/S23 or B2/S/C3")
+        self._wolframRule = self._spinBox(0, 255)
+        self._wolframRule.setValue(30)
+        self._wolframRule.setToolTip("Elementary Wolfram rule number from 0 through 255")
         self._neighborhood = QComboBox()
         self._neighborhood.addItem("Moore (8 neighbors)", "moore")
         self._neighborhood.addItem("von Neumann (4 neighbors)", "von_neumann")
@@ -281,9 +302,11 @@ class PropertyInspector(QWidget):
         self._boundary = QComboBox()
         self._boundary.addItem("Wrap", "wrap")
         self._boundary.addItem("Fixed", "fixed")
+        simulationForm.addRow("Rule type", self._simulationMode)
         simulationForm.addRow("Rule", self._rulePreset)
         simulationForm.addRow("Notation", self._customNotation)
         simulationForm.addRow("Neighborhood", self._neighborhood)
+        simulationForm.addRow("Wolfram rule", self._wolframRule)
         simulationForm.addRow("Grid mode", self._gridMode)
         simulationForm.addRow("Grid width", self._gridWidth)
         simulationForm.addRow("Grid height", self._gridHeight)
@@ -296,11 +319,6 @@ class PropertyInspector(QWidget):
         initialForm = QFormLayout(initial)
         self._initialForm = initialForm
         self._initialType = QComboBox()
-        self._initialType.addItem("Random", "random")
-        self._initialType.addItem("Center block", "center_block")
-        self._initialType.addItem("Disc", "disc")
-        self._initialType.addItem("Explicit cells", "cells")
-        self._initialType.addItem("RLE pattern", "rle")
         self._density = QDoubleSpinBox()
         self._density.setRange(0, 1)
         self._density.setSingleStep(0.05)
@@ -315,12 +333,15 @@ class PropertyInspector(QWidget):
         self._rle = QPlainTextEdit()
         self._rle.setPlaceholderText("Paste a two-state Life RLE pattern")
         self._rle.setMaximumHeight(110)
+        self._bits = QLineEdit("1")
+        self._bits.setPlaceholderText("Centered bit pattern, for example 101101")
         initialForm.addRow("Type", self._initialType)
         initialForm.addRow("Density", self._density)
         initialForm.addRow("Radius", self._radius)
         initialForm.addRow("Coordinates", self._origin)
         initialForm.addRow("Cells", self._cells)
         initialForm.addRow("RLE", self._rle)
+        initialForm.addRow("Bits", self._bits)
         layout.addWidget(initial)
 
         appearance = QGroupBox("Appearance")
@@ -345,15 +366,18 @@ class PropertyInspector(QWidget):
         layout.addWidget(timing)
         layout.addStretch(1)
 
+        self._simulationMode.currentIndexChanged.connect(self._simulationModeChanged)
         self._rulePreset.currentIndexChanged.connect(self._ruleChanged)
         self._gridMode.currentIndexChanged.connect(self._gridModeChanged)
         self._initialType.currentIndexChanged.connect(self._initialChanged)
         self._layerSeedMode.currentIndexChanged.connect(self._seedModeChanged)
         self._connectLineEdit(self._layerName, True)
         self._connectLineEdit(self._customNotation, True)
+        self._connectLineEdit(self._bits, True)
         self._layerSeed.editingFinished.connect(self._layerSeedEdited)
         for control in (
             self._neighborhood,
+            self._wolframRule,
             self._gridWidth,
             self._gridHeight,
             self._boundary,
@@ -459,9 +483,57 @@ class PropertyInspector(QWidget):
         self._emitChange(True)
 
     # :: VOID -> NONE
+    # Switches the contextual rule and initializer controls as one atomic edit
+    def _simulationModeChanged(self) -> None:
+        simulationMode = self._simulationMode.currentData()
+        defaultInitial = "single_center" if simulationMode == "wolfram_2d" else "random"
+        self._populateInitialTypes(simulationMode, defaultInitial)
+        self._syncSimulationControls()
+        self._emitChange(True)
+
+    # :: STRING, STRING -> NONE
+    # Rebuilds initializer choices for the selected simulation family
+    def _populateInitialTypes(self, simulationMode: str, selectedType: str) -> None:
+        self._initialType.blockSignals(True)
+        self._initialType.clear()
+        choices = (
+            (
+                ("Single center cell", "single_center"),
+                ("Seeded random row", "random"),
+                ("Explicit centered bits", "bits"),
+            )
+            if simulationMode == "wolfram_2d"
+            else (
+                ("Random", "random"),
+                ("Center block", "center_block"),
+                ("Disc", "disc"),
+                ("Explicit cells", "cells"),
+                ("RLE pattern", "rle"),
+            )
+        )
+        for label, value in choices:
+            self._initialType.addItem(label, value)
+        selectedIndex = self._initialType.findData(selectedType)
+        self._initialType.setCurrentIndex(max(0, selectedIndex))
+        self._initialType.blockSignals(False)
+
+    # :: VOID -> NONE
+    # Shows controls belonging to the active simulation family
+    def _syncSimulationControls(self) -> None:
+        wolfram = self._simulationMode.currentData() == "wolfram_2d"
+        self._setFieldVisible(self._simulationForm, self._rulePreset, not wolfram)
+        self._setFieldVisible(self._simulationForm, self._wolframRule, wolfram)
+        self._setFieldVisible(self._simulationForm, self._boundary, not wolfram)
+        self._syncRuleControls()
+        self._syncInitialControls()
+
+    # :: VOID -> NONE
     # Shows custom rule controls only when applicable
     def _syncRuleControls(self) -> None:
-        custom = self._rulePreset.currentData() == "custom"
+        custom = (
+            self._simulationMode.currentData() == "outer_totalistic"
+            and self._rulePreset.currentData() == "custom"
+        )
         self._setFieldVisible(self._simulationForm, self._customNotation, custom)
         self._setFieldVisible(self._simulationForm, self._neighborhood, custom)
 
@@ -564,6 +636,7 @@ class PropertyInspector(QWidget):
         self._setFieldVisible(self._initialForm, self._origin, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._cells, initialType == "cells")
         self._setFieldVisible(self._initialForm, self._rle, initialType == "rle")
+        self._setFieldVisible(self._initialForm, self._bits, initialType == "bits")
 
     # :: formLayout, widget, BOOL -> NONE
     # Shows or hides a form field together with its label
@@ -588,6 +661,13 @@ class PropertyInspector(QWidget):
     # Builds the selected initializer mapping
     def _initialData(self) -> dict[str, object]:
         initialType = self._initialType.currentData()
+        if initialType == "single_center":
+            return {"type": initialType}
+        if initialType == "bits":
+            compact = "".join(self._bits.text().split())
+            if not compact or any(character not in "01" for character in compact):
+                raise ValueError("Wolfram bits must contain only zero and one")
+            return {"type": initialType, "bits": [int(character) for character in compact]}
         if initialType == "random":
             return {"type": initialType, "density": self._density.value()}
         if initialType in {"center_block", "disc"}:

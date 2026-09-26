@@ -9,6 +9,9 @@ from ca_video.config.models import Layer2DConfig, ProjectConfig  # Read validate
 from ca_video.rendering.renderer_2d import Renderer2D  # Render transparent layer frames
 from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
+from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
+
+SimulationEngine = OuterTotalisticEngine | WolframEngine
 
 
 # :: INT, STRING -> INT
@@ -30,7 +33,7 @@ class ProjectRuntime:
         self._currentFrameIndex = 0
         self._currentTimeTicks = 0
         self._currentTimebase = 1
-        self._engines: dict[str, OuterTotalisticEngine] = {}
+        self._engines: dict[str, SimulationEngine] = {}
         self._renderers: dict[str, Renderer2D] = {}
         self.reset()
 
@@ -44,10 +47,10 @@ class ProjectRuntime:
     def project(self) -> ProjectConfig:
         return self._project
 
-    # PROPERTY :: VOID -> outerTotalisticEngine
+    # PROPERTY :: VOID -> simulationEngine
     # Returns the first layer engine for single-layer compatibility
     @property
-    def engine(self) -> OuterTotalisticEngine:
+    def engine(self) -> SimulationEngine:
         return self._engines[self._project.layer.id]
 
     # PROPERTY :: VOID -> INT
@@ -66,9 +69,9 @@ class ProjectRuntime:
     # Instance Methods
     #
 
-    # :: INT -> outerTotalisticEngine
+    # :: INT -> simulationEngine
     # Returns the engine for a layer in editor order
-    def engineForLayer(self, layerIndex: int) -> OuterTotalisticEngine:
+    def engineForLayer(self, layerIndex: int) -> SimulationEngine:
         layer = self._project.layers[layerIndex]
         return self._engines[layer.id]
 
@@ -152,13 +155,32 @@ class ProjectRuntime:
     # Protected Methods
     #
 
-    # :: layer2DConfig -> outerTotalisticEngine
+    # :: layer2DConfig -> simulationEngine
     # Creates one deterministically initialized layer engine
-    def _createEngine(self, layer: Layer2DConfig) -> OuterTotalisticEngine:
+    def _createEngine(self, layer: Layer2DConfig) -> SimulationEngine:
         if not layer.enabled:
+            if layer.simulationMode == "wolfram_2d":
+                return WolframEngine.blank(layer.gridWidth, layer.gridHeight, layer.wolframRule or 0)
+            if layer.rule is None:
+                raise ValueError("outer-totalistic layer is missing its rule")
             grid = np.zeros((layer.gridHeight, layer.gridWidth), dtype=np.uint8)
             return OuterTotalisticEngine(grid, layer.rule, layer.boundary)
         initial = layer.initial
+        resolvedSeed = layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id)
+        if layer.simulationMode == "wolfram_2d":
+            if layer.wolframRule is None:
+                raise ValueError("Wolfram layer is missing its rule number")
+            return WolframEngine(
+                layer.gridWidth,
+                layer.gridHeight,
+                layer.wolframRule,
+                initial.type,
+                initial.density,
+                resolvedSeed,
+                initial.bits,
+            )
+        if layer.rule is None:
+            raise ValueError("outer-totalistic layer is missing its rule")
         rlePath = initial.rlePath
         if rlePath is not None and not rlePath.is_absolute():
             rlePath = self._project.baseDir / rlePath
@@ -168,7 +190,7 @@ class ProjectRuntime:
             initial.type,
             initial.density,
             initial.radius,
-            layer.seed if layer.seed is not None else stableLayerSeed(self._project.seed, layer.id),
+            resolvedSeed,
             initial.size,
             initial.cells,
             initial.origin,
@@ -189,7 +211,7 @@ class ProjectRuntime:
                 layer.liveColor,
                 layer.opacity,
                 layer.layout,
-                layer.rule.states,
+                layer.rule.states if layer.rule is not None else 2,
             )
             for layer in self._project.layers
         }

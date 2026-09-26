@@ -1,7 +1,7 @@
 import json  # Parse FFprobe output
 import subprocess  # Inspect the rendered MP4 stream
 
-from ca_video.config.models import defaultProject  # Create a valid render fixture
+from ca_video.config.models import defaultProject, parseProject  # Create valid render fixtures
 from ca_video.encoding.ffmpeg import renderProject  # Exercise the real FFmpeg pipeline
 
 
@@ -51,4 +51,48 @@ def test_short_mp4_has_expected_stream(tmp_path) -> None:
         "height": 180,
         "pix_fmt": "yuv420p",
         "nb_frames": "5",
+    }
+
+
+def test_wolfram_project_exports_through_shared_pipeline(tmp_path) -> None:
+    data = defaultProject(tmp_path).toDict()
+    data["output"].update(
+        {
+            "width": 320,
+            "height": 180,
+            "fps": 10,
+            "duration_seconds": 0.2,
+            "encoder_preset": "ultrafast",
+        }
+    )
+    data["layers"][0]["simulation"] = {
+        "mode": "wolfram_2d",
+        "grid": {"size": [80, 45], "boundary": "wrap"},
+        "rule": {"number": 30},
+        "initial": {"type": "single_center"},
+    }
+    output = tmp_path / "wolfram.mp4"
+    renderProject(parseProject(data, tmp_path), output)
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,nb_frames",
+            "-of",
+            "json",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(probe.stdout)["streams"][0] == {
+        "width": 320,
+        "height": 180,
+        "nb_frames": "2",
     }

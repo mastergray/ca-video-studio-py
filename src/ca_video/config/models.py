@@ -28,6 +28,7 @@ ENCODER_PRESETS = {
     "veryslow",
 }
 INITIAL_TYPES = {"random", "center_block", "disc", "cells", "rle", "catalog_default"}
+WOLFRAM_INITIAL_TYPES = {"single_center", "random", "bits"}
 
 
 # Indicates that a project configuration is invalid or unsupported
@@ -199,7 +200,7 @@ class OutputConfig:
 # Stores validated settings for a two-dimensional initializer
 class Initial2DConfig:
 
-    # CONSTRUCTOR :: STRING, FLOAT, INT, (INT, INT)?, ((INT, INT)), STRING, STRING?, path? -> initial2DConfig
+    # CONSTRUCTOR :: STRING, FLOAT, INT, (INT, INT)?, ((INT, INT)), STRING, STRING?, path?, (INT) -> initial2DConfig
     # Creates immutable-by-convention initializer settings
     def __init__(
         self,
@@ -211,6 +212,7 @@ class Initial2DConfig:
         origin: str = "center",
         rleData: str | None = None,
         rlePath: Path | None = None,
+        bits: tuple[int, ...] = (),
     ) -> None:
         self._type = type
         self._density = density
@@ -220,6 +222,7 @@ class Initial2DConfig:
         self._origin = origin
         self._rleData = rleData
         self._rlePath = rlePath
+        self._bits = bits
 
     #
     # Properties
@@ -273,11 +276,17 @@ class Initial2DConfig:
     def rlePath(self) -> Path | None:
         return self._rlePath
 
+    # PROPERTY :: VOID -> (INT)
+    # Returns the explicit centered Wolfram starting pattern
+    @property
+    def bits(self) -> tuple[int, ...]:
+        return self._bits
 
-# Stores validated settings for the milestone's single 2D layer
+
+# Stores validated settings for an outer-totalistic or Wolfram 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT? -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT? -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -298,6 +307,8 @@ class Layer2DConfig:
         initial: Initial2DConfig | None = None,
         seed: int | None = None,
         cellSizePx: int | None = None,
+        simulationMode: str = "outer_totalistic",
+        wolframRule: int | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -311,11 +322,13 @@ class Layer2DConfig:
         self._initialDensity = initialDensity
         self._liveColor = liveColor
         self._layout = layout
-        self._rule = rule or parseRule("B3/S23")
+        self._rule = rule if simulationMode == "wolfram_2d" else (rule or parseRule("B3/S23"))
         self._rulePreset = rulePreset
         self._initial = initial or Initial2DConfig("random", initialDensity)
         self._seed = seed
         self._cellSizePx = cellSizePx
+        self._simulationMode = simulationMode
+        self._wolframRule = wolframRule
 
     #
     # Properties
@@ -393,10 +406,10 @@ class Layer2DConfig:
     def layout(self) -> str:
         return self._layout
 
-    # PROPERTY :: VOID -> outerTotalisticRule
+    # PROPERTY :: VOID -> outerTotalisticRule?
     # Returns the parsed simulation rule
     @property
-    def rule(self) -> OuterTotalisticRule:
+    def rule(self) -> OuterTotalisticRule | None:
         return self._rule
 
     # PROPERTY :: VOID -> STRING?
@@ -422,6 +435,18 @@ class Layer2DConfig:
     @property
     def cellSizePx(self) -> int | None:
         return self._cellSizePx
+
+    # PROPERTY :: VOID -> STRING
+    # Returns the selected two-dimensional simulation family
+    @property
+    def simulationMode(self) -> str:
+        return self._simulationMode
+
+    # PROPERTY :: VOID -> INT?
+    # Returns the elementary rule number for a Wolfram layer
+    @property
+    def wolframRule(self) -> int | None:
+        return self._wolframRule
 
 
 # Stores a fully validated project configuration
@@ -550,27 +575,36 @@ class ProjectConfig:
 def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
     initial = layer.initial
     initialData: dict[str, Any] = {"type": initial.type}
-    if initial.type in {"random", "center_block", "disc"}:
-        initialData["density"] = initial.density
-    if initial.type in {"center_block", "disc"}:
-        if initial.size is not None and initial.type == "center_block":
-            initialData["size"] = list(initial.size)
-        else:
-            initialData["radius"] = initial.radius
-    if initial.type == "cells":
-        initialData["origin"] = initial.origin
-        initialData["cells"] = [list(cell) for cell in initial.cells]
-    if initial.type == "rle":
-        initialData["origin"] = initial.origin
-        if initial.rleData is not None:
-            initialData["data"] = initial.rleData
-        elif initial.rlePath is not None:
-            initialData["path"] = str(initial.rlePath)
-    ruleData = (
-        {"preset": layer.rulePreset}
-        if layer.rulePreset is not None
-        else {"notation": layer.rule.notation, "neighborhood": layer.rule.neighborhood}
-    )
+    if layer.simulationMode == "wolfram_2d":
+        if initial.type == "random":
+            initialData["density"] = initial.density
+        if initial.type == "bits":
+            initialData["bits"] = list(initial.bits)
+        ruleData = {"number": layer.wolframRule}
+    else:
+        if initial.type in {"random", "center_block", "disc"}:
+            initialData["density"] = initial.density
+        if initial.type in {"center_block", "disc"}:
+            if initial.size is not None and initial.type == "center_block":
+                initialData["size"] = list(initial.size)
+            else:
+                initialData["radius"] = initial.radius
+        if initial.type == "cells":
+            initialData["origin"] = initial.origin
+            initialData["cells"] = [list(cell) for cell in initial.cells]
+        if initial.type == "rle":
+            initialData["origin"] = initial.origin
+            if initial.rleData is not None:
+                initialData["data"] = initial.rleData
+            elif initial.rlePath is not None:
+                initialData["path"] = str(initial.rlePath)
+        if layer.rule is None:
+            raise ConfigError("outer-totalistic layer is missing its rule")
+        ruleData = (
+            {"preset": layer.rulePreset}
+            if layer.rulePreset is not None
+            else {"notation": layer.rule.notation, "neighborhood": layer.rule.neighborhood}
+        )
     return {
         "id": layer.id,
         "name": layer.name,
@@ -581,7 +615,7 @@ def _layerToDict(layer: Layer2DConfig) -> dict[str, Any]:
         "opacity": layer.opacity,
         "step_interval_ms": layer.stepIntervalMs,
         "simulation": {
-            "mode": "outer_totalistic",
+            "mode": layer.simulationMode,
             "grid": {
                 **(
                     {"cell_size_px": layer.cellSizePx}
@@ -690,40 +724,50 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
 
     simulation = _asMapping(layerData.get("simulation"), "layers[0].simulation")
     _rejectUnknown(simulation, {"mode", "grid", "rule", "initial"}, "layers[0].simulation")
-    if simulation.get("mode") != "outer_totalistic":
-        raise ConfigError("the current milestone supports only outer_totalistic simulation")
+    simulationMode = simulation.get("mode")
+    if simulationMode not in {"outer_totalistic", "wolfram_2d"}:
+        raise ConfigError("layers[0].simulation.mode must be outer_totalistic or wolfram_2d")
     ruleData = _asMapping(simulation.get("rule"), "layers[0].simulation.rule")
-    _rejectUnknown(ruleData, {"preset", "notation", "neighborhood"}, "layers[0].simulation.rule")
-    hasPreset = "preset" in ruleData
-    hasNotation = "notation" in ruleData or "neighborhood" in ruleData
-    if hasPreset == hasNotation:
-        raise ConfigError("layers[0].simulation.rule must use either preset or notation with neighborhood")
-    if hasPreset:
-        preset = ruleData.get("preset")
-        if not isinstance(preset, str):
-            raise ConfigError("layers[0].simulation.rule.preset must be a string")
-        try:
-            catalogRule = getRule(preset)
-            parsedRule = parseRule(catalogRule.notation, "moore")
-        except (KeyError, ValueError) as error:
-            raise ConfigError(str(error)) from error
-        rulePreset: str | None = preset
+    wolframRule: int | None = None
+    if simulationMode == "wolfram_2d":
+        _rejectUnknown(ruleData, {"number"}, "layers[0].simulation.rule")
+        wolframRule = _asInteger(ruleData.get("number"), "layers[0].simulation.rule.number", 0, 255)
+        parsedRule: OuterTotalisticRule | None = None
+        rulePreset: str | None = None
     else:
-        notation = ruleData.get("notation")
-        neighborhood = ruleData.get("neighborhood")
-        if not isinstance(notation, str) or not isinstance(neighborhood, str):
-            raise ConfigError("custom rules require string notation and neighborhood")
-        try:
-            parsedRule = parseRule(notation, neighborhood)
-        except ValueError as error:
-            raise ConfigError(f"layers[0].simulation.rule: {error}") from error
-        rulePreset = None
+        _rejectUnknown(ruleData, {"preset", "notation", "neighborhood"}, "layers[0].simulation.rule")
+        hasPreset = "preset" in ruleData
+        hasNotation = "notation" in ruleData or "neighborhood" in ruleData
+        if hasPreset == hasNotation:
+            raise ConfigError("layers[0].simulation.rule must use either preset or notation with neighborhood")
+        if hasPreset:
+            preset = ruleData.get("preset")
+            if not isinstance(preset, str):
+                raise ConfigError("layers[0].simulation.rule.preset must be a string")
+            try:
+                catalogRule = getRule(preset)
+                parsedRule = parseRule(catalogRule.notation, "moore")
+            except (KeyError, ValueError) as error:
+                raise ConfigError(str(error)) from error
+            rulePreset = preset
+        else:
+            notation = ruleData.get("notation")
+            neighborhood = ruleData.get("neighborhood")
+            if not isinstance(notation, str) or not isinstance(neighborhood, str):
+                raise ConfigError("custom rules require string notation and neighborhood")
+            try:
+                parsedRule = parseRule(notation, neighborhood)
+            except ValueError as error:
+                raise ConfigError(f"layers[0].simulation.rule: {error}") from error
+            rulePreset = None
 
     grid = _asMapping(simulation.get("grid"), "layers[0].simulation.grid")
     _rejectUnknown(grid, {"size", "cell_size_px", "boundary"}, "layers[0].simulation.grid")
     boundary = grid.get("boundary", "wrap")
     if boundary not in {"wrap", "fixed"}:
         raise ConfigError("layers[0].simulation.grid.boundary must be wrap or fixed")
+    if simulationMode == "wolfram_2d" and boundary != "wrap":
+        raise ConfigError("Wolfram layers require a wrapped horizontal boundary")
     if "size" in grid and "cell_size_px" in grid:
         raise ConfigError("grid must use either size or cell_size_px, not both")
     cellSize: int | None = None
@@ -739,16 +783,28 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         gridHeight = math.ceil(height / cellSize)
 
     initialData = _asMapping(simulation.get("initial"), "layers[0].simulation.initial")
-    _rejectUnknown(initialData, {"type", "density", "radius", "size", "cells", "origin", "data", "path"}, "layers[0].simulation.initial")
+    initialFields = (
+        {"type", "density", "bits"}
+        if simulationMode == "wolfram_2d"
+        else {"type", "density", "radius", "size", "cells", "origin", "data", "path"}
+    )
+    _rejectUnknown(initialData, initialFields, "layers[0].simulation.initial")
     initialType = initialData.get("type")
-    if initialType not in INITIAL_TYPES:
-        choices = ", ".join(sorted(INITIAL_TYPES))
+    validInitialTypes = WOLFRAM_INITIAL_TYPES if simulationMode == "wolfram_2d" else INITIAL_TYPES
+    if initialType not in validInitialTypes:
+        choices = ", ".join(sorted(validInitialTypes))
         raise ConfigError(f"layers[0].simulation.initial.type must be one of {choices}")
     if initialType == "catalog_default":
         if rulePreset is None:
             raise ConfigError("catalog_default initialization requires a rule preset")
         initialType = getRule(rulePreset).recommendedInitial
-    density = _asNumber(initialData.get("density", 1), "layers[0].simulation.initial.density", 0, 1)
+    defaultDensity = 0.5 if simulationMode == "wolfram_2d" else 1
+    density = _asNumber(
+        initialData.get("density", defaultDensity),
+        "layers[0].simulation.initial.density",
+        0,
+        1,
+    )
     radius = _asInteger(initialData.get("radius", 2), "layers[0].simulation.initial.radius", 1, 2048)
     shapeSize: tuple[int, int] | None = None
     if "size" in initialData:
@@ -813,7 +869,19 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
             if boundary == "fixed" and (pattern.shape[1] > gridWidth or pattern.shape[0] > gridHeight):
                 raise ConfigError("RLE pattern is larger than the fixed grid")
 
-    initial = Initial2DConfig(initialType, density, radius, shapeSize, cells, origin, rleData, rlePath)
+    bits: tuple[int, ...] = ()
+    if initialType == "bits":
+        bitValues = initialData.get("bits")
+        if not isinstance(bitValues, list) or not bitValues:
+            raise ConfigError("layers[0].simulation.initial.bits must be a non-empty list")
+        if len(bitValues) > gridWidth:
+            raise ConfigError("layers[0].simulation.initial.bits is wider than the grid")
+        bits = tuple(
+            _asInteger(bit, f"layers[0].simulation.initial.bits[{index}]", 0, 1)
+            for index, bit in enumerate(bitValues)
+        )
+
+    initial = Initial2DConfig(initialType, density, radius, shapeSize, cells, origin, rleData, rlePath, bits)
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
     _rejectUnknown(render, {"style", "color", "layout"}, "layers[0].render")
@@ -842,6 +910,8 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         initial,
         layerSeed,
         cellSize,
+        simulationMode,
+        wolframRule,
     )
     parsedLayers = [layer]
     for layerIndex, extraLayerData in enumerate(layers[1:], 1):

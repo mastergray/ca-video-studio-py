@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Wolfram Rule 30",
+    "seed": 30
+  },
+  "output": {
+    "path": "wolfram-rule-30.mp4",
+    "width": 1920,
+    "height": 1080,
+    "fps": 60,
+    "duration_seconds": 10,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#071113"
+  },
+  "layers": [
+    {
+      "id": "rule_30",
+      "name": "Rule 30",
+      "enabled": true,
+      "dimension": "2d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 50,
+      "simulation": {
+        "mode": "wolfram_2d",
+        "grid": {
+          "cell_size_px": 8,
+          "boundary": "wrap"
+        },
+        "rule": {
+          "number": 30
+        },
+        "initial": {
+          "type": "single_center"
+        }
+      },
+      "render": {
+        "style": "cells",
+        "color": "#3ac5c9",
+        "layout": "cover"
+      }
+    }
+  ]
+}

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (  # Build the native three-pane editor
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (  # Build the native three-pane editor
 
 from ca_video.config.models import (  # Load, validate, and persist projects
     ConfigError,
+    Layer2DConfig,
     ProjectConfig,
     defaultProject,
     loadProject,
@@ -200,8 +202,13 @@ class MainWindow(QMainWindow):
         self._layerList.itemChanged.connect(self._layerItemChanged)
         self._layerList.currentRowChanged.connect(self._layerSelectionChanged)
         layout.addWidget(self._layerList, 1)
-        self._addLayerButton = QPushButton("+ Add 2D Layer")
-        self._addLayerButton.clicked.connect(self._addLayer)
+        self._addLayerButton = QPushButton("+ Add Layer")
+        addMenu = QMenu(self._addLayerButton)
+        add2DAction = addMenu.addAction("2D Automaton")
+        add2DAction.triggered.connect(self._addLayer)
+        addWolframAction = addMenu.addAction("Wolfram 2D History")
+        addWolframAction.triggered.connect(self._addWolframLayer)
+        self._addLayerButton.setMenu(addMenu)
         layout.addWidget(self._addLayerButton)
         self._duplicateLayerButton = QPushButton("Duplicate")
         self._duplicateLayerButton.clicked.connect(self._duplicateLayer)
@@ -368,7 +375,7 @@ class MainWindow(QMainWindow):
         self._layerList.clear()
         self._selectedLayerIndex = min(self._selectedLayerIndex, len(self._project.layers) - 1)
         for layer in self._project.layers:
-            item = QListWidgetItem(f"{layer.name}    2D")
+            item = QListWidgetItem(f"{layer.name}    {self._layerTypeLabel(layer)}")
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if layer.enabled else Qt.CheckState.Unchecked)
             self._layerList.addItem(item)
@@ -403,10 +410,15 @@ class MainWindow(QMainWindow):
         density = engine.liveCount / engine.grid.size * 100
         duration = self._project.output.durationSeconds
         currentSeconds = self._previewTick / PREVIEW_FPS
+        ruleLabel = (
+            f"W{layer.wolframRule}"
+            if layer.simulationMode == "wolfram_2d"
+            else layer.rule.notation if layer.rule is not None else "Unknown"
+        )
         self._timeLabel.setText(f"{currentSeconds:06.2f} / {duration:06.2f} s")
         self._infoLabel.setText(
             f"Gen {engine.generation}  ·  {engine.liveCount:,} live  ·  {density:.1f}%  ·  "
-            f"{layer.name}  ·  {layer.gridWidth}×{layer.gridHeight}  ·  {layer.rule.notation}"
+            f"{layer.name}  ·  {layer.gridWidth}×{layer.gridHeight}  ·  {ruleLabel}"
         )
         self._formatLabel.setText(
             f"Preview {self._runtime.renderSize[0]}×{self._runtime.renderSize[1]} @ {PREVIEW_FPS}  ·  "
@@ -533,7 +545,7 @@ class MainWindow(QMainWindow):
             item = self._layerList.item(layerIndex)
             if item is None:
                 continue
-            item.setText(f"{layer.name}    2D")
+            item.setText(f"{layer.name}    {self._layerTypeLabel(layer)}")
             item.setCheckState(Qt.CheckState.Checked if layer.enabled else Qt.CheckState.Unchecked)
         self._loadingUi = False
 
@@ -545,6 +557,27 @@ class MainWindow(QMainWindow):
         layerData = defaultProject(self._project.baseDir).toDict()["layers"][0]
         layerData["id"] = self._uniqueLayerId(f"layer_{layerNumber}")
         layerData["name"] = f"Layer {layerNumber}"
+        layerData["render"]["color"] = "#3ac5c9"
+        data["layers"].insert(0, layerData)
+        self._normalizeLayerOrder(data)
+        self._selectedLayerIndex = 0
+        self._applyEditorData(data, True)
+        self._loadUiFromProject()
+
+    # :: VOID -> NONE
+    # Adds a default elementary automaton displayed as scrolling 2D history
+    def _addWolframLayer(self) -> None:
+        data = self._project.toDict()
+        layerNumber = len(data["layers"]) + 1
+        layerData = defaultProject(self._project.baseDir).toDict()["layers"][0]
+        layerData["id"] = self._uniqueLayerId(f"wolfram_{layerNumber}")
+        layerData["name"] = "Wolfram Rule 30"
+        layerData["simulation"] = {
+            "mode": "wolfram_2d",
+            "grid": {"size": [160, 90], "boundary": "wrap"},
+            "rule": {"number": 30},
+            "initial": {"type": "single_center"},
+        }
         layerData["render"]["color"] = "#3ac5c9"
         data["layers"].insert(0, layerData)
         self._normalizeLayerOrder(data)
@@ -602,6 +635,11 @@ class MainWindow(QMainWindow):
             candidate = f"{base[: 64 - len(ending)]}{ending}"
             suffix += 1
         return candidate
+
+    # :: layer2DConfig -> STRING
+    # Produces the compact simulation-family label shown in the layer list
+    def _layerTypeLabel(self, layer: Layer2DConfig) -> str:
+        return f"W{layer.wolframRule}" if layer.simulationMode == "wolfram_2d" else "2D"
 
     # :: ARRAY<STRING, object> -> NONE
     # Assigns z-index values so the top row composites last

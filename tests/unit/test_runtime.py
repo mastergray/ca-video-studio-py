@@ -2,6 +2,7 @@ import numpy as np  # Compare rendered frame buffers
 
 from ca_video.config.models import defaultProject, parseProject  # Create deterministic test projects
 from ca_video.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
+from ca_video.simulation.wolfram import WolframEngine  # Identify Wolfram runtime layers
 
 
 def test_runtime_is_deterministic_and_frame_zero_is_initial_state() -> None:
@@ -108,3 +109,24 @@ def test_preview_and_export_match_generation_at_same_time() -> None:
     assert previewRuntime.engine.generation == 1
     assert exportRuntime.engine.generation == 1
     np.testing.assert_array_equal(previewFrame, exportFrame)
+
+
+def test_wolfram_and_outer_totalistic_layers_share_independent_timing() -> None:
+    data = defaultProject().toDict()
+    wolfram = defaultProject().toDict()["layers"][0]
+    wolfram.update({"id": "rule_30", "name": "Rule 30", "step_interval_ms": 200})
+    wolfram["simulation"] = {
+        "mode": "wolfram_2d",
+        "grid": {"size": [80, 45], "boundary": "wrap"},
+        "rule": {"number": 30},
+        "initial": {"type": "single_center"},
+    }
+    data["layers"].append(wolfram)
+    runtime = ProjectRuntime(parseProject(data), (320, 180))
+
+    frame = runtime.renderAtTick(6, 30)
+
+    assert runtime.engineForLayer(0).generation == 2
+    assert runtime.engineForLayer(1).generation == 1
+    assert isinstance(runtime.engineForLayer(1), WolframEngine)
+    assert frame.shape == (180, 320, 3)

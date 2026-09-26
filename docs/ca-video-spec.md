@@ -239,6 +239,15 @@ All elementary Wolfram rules from 0 through 255 are supported.
 - `wolfram_3d_extruded`: the same evolving row is extruded through a configurable depth band and scrolled through the 3D grid, matching the visual idea in the reference server.
 - The Wolfram horizontal boundary wraps.
 - Initial row modes are `single_center`, `random`, and explicit `bits`.
+- A new 2D Wolfram grid is prefilled from top to bottom with successive
+  generations, matching the reference server, so frame zero contains a useful
+  rule history. Subsequent simulation steps scroll that history upward.
+- Explicit `bits` are a non-empty array of zeroes and ones no wider than the
+  grid. Short patterns are centered in the starting row.
+- A 2D Wolfram simulation is encoded as `mode: "wolfram_2d"`, a rule object
+  containing `number` from 0 through 255, and one of these initial objects:
+  `{ "type": "single_center" }`, `{ "type": "random", "density": 0.5 }`, or
+  `{ "type": "bits", "bits": [1, 0, 1] }`.
 - Wolfram layers do not accept outer-totalistic `birth`, `survival`, `states`, `neighborhood`, or general-purpose initial-condition fields.
 
 ## 8. Built-in catalogs

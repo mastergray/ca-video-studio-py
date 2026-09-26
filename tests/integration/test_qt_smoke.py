@@ -152,3 +152,49 @@ def test_cell_size_grid_tracks_export_resolution() -> None:
     assert window.runtime.renderSize == (640, 360)
     window._setDirty(False)
     window.close()
+
+
+def test_add_and_edit_wolfram_layer() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+
+    window._addWolframLayer()
+    inspector = window.inspector
+    inspector._wolframRule.setValue(110)
+    inspector._initialType.setCurrentIndex(inspector._initialType.findData("bits"))
+    inspector._bits.setText("1011")
+    inspector._bits.editingFinished.emit()
+    app.processEvents()
+
+    layer = window.project.layer
+    assert len(window.project.layers) == 2
+    assert layer.simulationMode == "wolfram_2d"
+    assert layer.wolframRule == 110
+    assert layer.initial.bits == (1, 0, 1, 1)
+    assert window._layerList.item(0).text().endswith("W110")
+    assert "W110" in window._infoLabel.text()
+    assert inspector._wolframRule.isVisibleTo(inspector)
+    assert not inspector._rulePreset.isVisibleTo(inspector)
+    window._setDirty(False)
+    window.close()
+
+
+def test_existing_layer_can_switch_simulation_family() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    inspector = window.inspector
+
+    inspector._simulationMode.setCurrentIndex(inspector._simulationMode.findData("wolfram_2d"))
+    app.processEvents()
+    assert window.project.layer.simulationMode == "wolfram_2d"
+    assert window.project.layer.wolframRule == 30
+    assert window.project.layer.initial.type == "single_center"
+    assert window.project.layer.boundary == "wrap"
+
+    inspector._simulationMode.setCurrentIndex(inspector._simulationMode.findData("outer_totalistic"))
+    app.processEvents()
+    assert window.project.layer.simulationMode == "outer_totalistic"
+    assert window.project.layer.rulePreset == "life"
+    assert window.project.layer.initial.type == "random"
+    window._setDirty(False)
+    window.close()
