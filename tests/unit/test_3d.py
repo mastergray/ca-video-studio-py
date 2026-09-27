@@ -88,6 +88,21 @@ def test_3d_renderer_produces_transparent_exact_size_layer() -> None:
     assert np.count_nonzero(layer[..., 3]) > 0
 
 
+def test_3d_renderers_apply_per_voxel_fade_presence() -> None:
+    grid = np.zeros((8, 8, 8), dtype=np.uint8)
+    grid[4, 4, 4] = 1
+    presence = np.zeros_like(grid, dtype=np.float32)
+    presence[4, 4, 4] = 0.25
+    isometric = Renderer3D(160, 90, getPalette3D("445"))
+    projected = ProjectedRenderer3D(160, 90, getPalette3D("445"), CameraConfig())
+
+    isometricLayer = isometric.renderLayer(grid, presence=presence, displayGrid=grid)
+    projectedLayer = projected.renderLayer(grid, presence=presence, displayGrid=grid)
+
+    assert 0 < isometricLayer[..., 3].max() < 0.3
+    assert projectedLayer[..., 3].max() == 0.25
+
+
 def test_projected_renderer_is_timestamp_driven_and_exact_size() -> None:
     grid = np.zeros((12, 12, 12), dtype=np.uint8)
     grid[4:8, 5, 4:8] = 1

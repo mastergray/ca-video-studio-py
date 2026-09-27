@@ -45,13 +45,20 @@ class ProjectedRenderer3D:
         self._states = states
         self._colorLut = self._buildColorLut()
 
-    # :: grid3D, FLOAT -> rgbaFrame
+    # :: grid3D, FLOAT, presence?, grid3D? -> rgbaFrame
     # Projects occupied voxels at an exact presentation timestamp
-    def renderLayer(self, grid: NDArray[np.uint8], presentationSeconds: float = 0) -> RGBAFrame:
+    def renderLayer(
+        self,
+        grid: NDArray[np.uint8],
+        presentationSeconds: float = 0,
+        presence: NDArray[np.float32] | None = None,
+        displayGrid: NDArray[np.uint8] | None = None,
+    ) -> RGBAFrame:
         if grid.ndim != 3 or len(set(grid.shape)) != 1:
             raise ValueError("projected 3D renderer requires a cubic voxel grid")
         layer = self._emptyLayer()
-        coordinates = self._visibleCoordinates(grid)
+        visualGrid = displayGrid if displayGrid is not None else grid
+        coordinates = self._visibleCoordinates(visualGrid, presence)
         if not len(coordinates):
             return layer
 
@@ -62,7 +69,12 @@ class ProjectedRenderer3D:
         center = (gridSize - 1) / 2
         points = np.stack((xValues, yValues, zValues), axis=1).astype(np.float32) - center
         radius = max(1.0, math.sqrt(3 * gridSize**2) / 2)
-        colors = self._voxelColors(grid, coordinates, points, radius)
+        colors = self._voxelColors(visualGrid, coordinates, points, radius)
+        alphas = (
+            presence[zValues, yValues, xValues]
+            if presence is not None
+            else np.ones(len(coordinates), dtype=np.float32)
+        )
 
         azimuth = math.radians(
             self._camera.azimuthDeg + self._camera.rotationDegPerSecond * presentationSeconds
@@ -95,7 +107,7 @@ class ProjectedRenderer3D:
         depthRange = float(np.ptp(depth))
         normalizedDepth = (depth - depth.min()) / max(1e-6, depthRange)
         shading = 1.05 - 0.55 * normalizedDepth if self._depthShading else np.ones_like(depth)
-        self._rasterize(layer, screenX, screenY, sizes, depth, colors, shading)
+        self._rasterize(layer, screenX, screenY, sizes, depth, colors, shading, alphas)
         return layer
 
     # :: VOID -> rgbaFrame
@@ -112,13 +124,18 @@ class ProjectedRenderer3D:
         layer[..., 3] = np.clip((distance - 0.25) * 0.18, 0, 0.18) * self._opacity
         return layer
 
-    # :: grid3D -> array
+    # :: grid3D, presence? -> array
     # Extracts occupied or six-neighbor surface voxel coordinates
-    def _visibleCoordinates(self, grid: NDArray[np.uint8]) -> NDArray[np.int64]:
-        occupied = grid > 0
+    def _visibleCoordinates(
+        self,
+        grid: NDArray[np.uint8],
+        presence: NDArray[np.float32] | None = None,
+    ) -> NDArray[np.int64]:
+        occupied = presence > 1e-6 if presence is not None else grid > 0
         if not self._surfaceOnly:
             return np.argwhere(occupied)
-        neighbors = self._orthogonalOccupancy(occupied)
+        solid = presence >= 0.5 if presence is not None else occupied
+        neighbors = self._orthogonalOccupancy(solid)
         return np.argwhere(occupied & (neighbors < 6))
 
     # :: array -> array
@@ -162,7 +179,7 @@ class ProjectedRenderer3D:
         indices = np.round(np.clip(values, 0, 1) * 255).astype(np.int64)
         return self._colorLut[indices]
 
-    # :: rgbaFrame, array, array, array, array, array, array -> NONE
+    # :: rgbaFrame, array, array, array, array, array, array, array -> NONE
     # Writes beveled square sprites using nearest-depth-per-pixel selection
     def _rasterize(
         self,
@@ -173,6 +190,7 @@ class ProjectedRenderer3D:
         depth: NDArray[np.float32],
         colors: NDArray[np.float32],
         shading: NDArray[np.float32],
+        alphas: NDArray[np.float32],
     ) -> None:
         maximumSize = int(sizes.max())
         halfSizes = sizes // 2
@@ -181,6 +199,7 @@ class ProjectedRenderer3D:
         pixelParts: list[NDArray[np.int64]] = []
         depthParts: list[NDArray[np.float32]] = []
         colorParts: list[NDArray[np.float32]] = []
+        alphaParts: list[NDArray[np.float32]] = []
         for offsetY in range(maximumSize):
             for offsetX in range(maximumSize):
                 included = (offsetX < sizes) & (offsetY < sizes)
@@ -206,18 +225,21 @@ class ProjectedRenderer3D:
                 depthParts.append(depth[included][inBounds])
                 brightness = (shading[included][inBounds] * bevel)[:, None]
                 colorParts.append(colors[included][inBounds] * brightness)
+                alphaParts.append(alphas[included][inBounds])
         if not pixelParts:
             return
         pixels = np.concatenate(pixelParts)
         depths = np.concatenate(depthParts)
         colorsByPixel = np.concatenate(colorParts)
+        alphasByPixel = np.concatenate(alphaParts)
         order = np.argsort(depths, kind="stable")
         pixels = pixels[order]
         colorsByPixel = colorsByPixel[order]
+        alphasByPixel = alphasByPixel[order]
         _, first = np.unique(pixels, return_index=True)
         flatLayer = layer.reshape(-1, 4)
         flatLayer[pixels[first], :3] = colorsByPixel[first].clip(0, 255)
-        flatLayer[pixels[first], 3] = self._opacity
+        flatLayer[pixels[first], 3] = self._opacity * alphasByPixel[first]
 
     # :: VOID -> array
     # Interpolates the face palette into a 256-color projected gradient

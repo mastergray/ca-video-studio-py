@@ -17,3 +17,15 @@ def test_renderer_produces_exact_rgb_dimensions() -> None:
 def test_scaled_grid_size_matches_fit_and_cover_geometry() -> None:
     assert scaledGridSize(640, 360, 100, 100, "fit") == (360, 360)
     assert scaledGridSize(640, 360, 100, 100, "cover") == (640, 640)
+
+
+def test_renderer_applies_logical_fade_presence_to_alpha() -> None:
+    grid = np.zeros((9, 16), dtype=np.uint8)
+    grid[4, 8] = 1
+    presence = np.zeros_like(grid, dtype=np.float32)
+    presence[4, 8] = 0.25
+    renderer = Renderer2D(16, 9, (0, 0, 0), (255, 128, 64))
+
+    layer = renderer.renderLayer(grid, presence=presence, displayGrid=grid)
+
+    assert layer[4, 8, 3] == 0.25

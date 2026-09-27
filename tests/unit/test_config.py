@@ -17,6 +17,26 @@ def test_default_project_has_exact_frame_count() -> None:
     assert project.output.width * 9 == project.output.height * 16
 
 
+def test_layer_fade_rate_round_trips_and_zero_is_omitted() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"]["fade_rate"] = 6.5
+
+    project = parseProject(data)
+
+    assert project.layer.fadeRate == 6.5
+    assert project.toDict()["layers"][0]["render"]["fade_rate"] == 6.5
+    data["layers"][0]["render"]["fade_rate"] = 0
+    assert "fade_rate" not in parseProject(data).toDict()["layers"][0]["render"]
+
+
+def test_layer_fade_rate_is_limited_to_reference_range() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"]["fade_rate"] = 51
+
+    with pytest.raises(ConfigError, match="between 0 and 50"):
+        parseProject(data)
+
+
 def test_non_integral_frame_count_is_rejected() -> None:
     project = defaultProject()
     invalid = project.output.withOverrides(durationSeconds=1.01)
@@ -266,6 +286,7 @@ def test_projected_camera_and_render_controls_round_trip() -> None:
             "style": "projected_voxel",
             "palette": "crystal",
             "color_by": "distance",
+            "fade_rate": 8,
             "voxel_scale": 7,
             "surface_only": True,
             "depth_shading": False,
@@ -283,6 +304,7 @@ def test_projected_camera_and_render_controls_round_trip() -> None:
     assert normalized.layer.camera.zoom == 1.4
     assert normalized.layer.camera.panX == 0.2
     assert normalized.layer.camera.elevationDeg == 20
+    assert normalized.layer.fadeRate == 8
     assert normalized.layer.initial.offsetCells == (3, -2, 1)
     assert normalized.toDict()["layers"][0]["simulation"]["initial"]["offset_cells"] == [3, -2, 1]
     assert not normalized.layer.depthShading

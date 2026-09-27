@@ -32,6 +32,23 @@ def test_preview_transport_uses_shared_runtime() -> None:
     window.close()
 
 
+def test_fade_rate_is_a_visual_edit_that_preserves_simulation_state() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    for _ in range(3):
+        window._advancePreview()
+    generation = window.runtime.engine.generation
+
+    window.inspector._fadeRate.setValue(6.5)
+    app.processEvents()
+
+    assert window.project.layer.fadeRate == 6.5
+    assert window.runtime.engine.generation == generation
+    assert window.inspector._fadeRate.isVisibleTo(window.inspector)
+    window._setDirty(False)
+    window.close()
+
+
 def test_editor_changes_custom_rule_and_saves_project(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow(defaultProject(tmp_path))
@@ -238,6 +255,7 @@ def test_add_and_edit_3d_layer() -> None:
     inspector._offsetX3D.setValue(3)
     inspector._offsetY3D.setValue(-2)
     inspector._offsetZ3D.setValue(1)
+    inspector._fadeRate.setValue(6.5)
     inspector._palette3D.setCurrentIndex(inspector._palette3D.findData("crystal"))
     app.processEvents()
 
@@ -247,6 +265,7 @@ def test_add_and_edit_3d_layer() -> None:
     assert layer.gridSize == 20
     assert layer.initial.type == "cross"
     assert layer.initial.offsetCells == (3, -2, 1)
+    assert layer.fadeRate == 6.5
     assert window.runtime.engine.grid[11, 8, 13] == 1
     assert window._layerList.item(0).text().endswith("3D")
     assert "20³" in window._infoLabel.text()
@@ -254,6 +273,7 @@ def test_add_and_edit_3d_layer() -> None:
     assert inspector._offsetX3D.isVisibleTo(inspector)
     assert inspector._offsetY3D.isVisibleTo(inspector)
     assert inspector._offsetZ3D.isVisibleTo(inspector)
+    assert inspector._fadeRate.isVisibleTo(inspector)
     assert not inspector._simulationMode.isVisibleTo(inspector)
     window._setDirty(False)
     window.close()

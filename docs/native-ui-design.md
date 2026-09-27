@@ -241,9 +241,9 @@ The inspector has two top-level tabs.
   offsets, logical-voxel X/Y/Z offsets, cells, or RLE file. Pixel controls
   appear only for 2D center-block and disc initializers; voxel controls appear
   only for geometric outer-totalistic 3D initializers.
-- **Appearance:** 2D colors/gradient/trail/opacity or 3D palette/render
-  style/coloring/voxel scale.
-- **Timing:** step interval and visual fade settings.
+- **Appearance:** fade rate plus 2D colors/gradient/trail/opacity or 3D
+  palette/render style/coloring/voxel scale.
+- **Timing:** step interval.
 - **Camera:** projection and motion settings for 3D layers only.
 
 **Project** contains collapsible sections:
@@ -405,7 +405,8 @@ inspector exposes rule number, cubic history size, extrusion depth and Y offset,
 and single/random/explicit-bit source rows while hiding the inapplicable 3D
 outer-totalistic rule and volume-boundary controls.
 
-Advanced gradients/trails, direct cell painting, and arbitrary timeline
+Visual fade rate is implemented as a common Appearance control for every layer
+family. Advanced gradients/trails, direct cell painting, and arbitrary timeline
 scrubbing remain visible in the overall design but are not yet implemented.
 Unimplemented controls must not be displayed as if they work.
 

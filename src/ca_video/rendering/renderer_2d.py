@@ -59,9 +59,15 @@ class Renderer2D:
         frame = self._background * (1.0 - alpha) + layer[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: grid, FLOAT -> rgbaFrame
+    # :: grid, FLOAT, presence?, grid? -> rgbaFrame
     # Renders transparent color and alpha for project composition
-    def renderLayer(self, grid: NDArray[np.uint8], presentationSeconds: float = 0) -> RGBAFrame:
+    def renderLayer(
+        self,
+        grid: NDArray[np.uint8],
+        presentationSeconds: float = 0,
+        presence: NDArray[np.float32] | None = None,
+        displayGrid: NDArray[np.uint8] | None = None,
+    ) -> RGBAFrame:
         gridHeight, gridWidth = grid.shape
         renderWidth, renderHeight = scaledGridSize(
             self._width,
@@ -70,7 +76,8 @@ class Renderer2D:
             gridHeight,
             self._layout,
         )
-        resized = self._resizeNearest(grid, renderWidth, renderHeight)
+        visualGrid = displayGrid if displayGrid is not None else grid
+        resized = self._resizeNearest(visualGrid, renderWidth, renderHeight)
 
         intensity = np.zeros(resized.shape, dtype=np.float32)
         intensity[resized == 1] = 1.0
@@ -79,6 +86,8 @@ class Renderer2D:
             intensity[decaying] = (self._states - resized[decaying]) / (self._states - 1)
         layer = np.empty((renderHeight, renderWidth, 4), dtype=np.float32)
         layer[..., :3] = self._liveColor
+        if presence is not None:
+            intensity *= self._resizeNearest(presence, renderWidth, renderHeight)
         layer[..., 3] = intensity * self._opacity
 
         if self._layout == "cover":
@@ -103,10 +112,10 @@ class Renderer2D:
     # Resizes a grid using deterministic nearest-neighbor sampling
     def _resizeNearest(
         self,
-        grid: NDArray[np.uint8],
+        grid: NDArray[np.uint8] | NDArray[np.float32],
         width: int,
         height: int,
-    ) -> NDArray[np.uint8]:
+    ) -> NDArray[np.uint8] | NDArray[np.float32]:
         sourceHeight, sourceWidth = grid.shape
         xIndices = np.minimum((np.arange(width) * sourceWidth // width), sourceWidth - 1)
         yIndices = np.minimum((np.arange(height) * sourceHeight // height), sourceHeight - 1)

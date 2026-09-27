@@ -15,7 +15,8 @@ pan, height/distance/state/fixed coloring, depth shading, vignetting, automatic
 or fixed voxel scale, and optional surface extraction. Reference-compatible
 extruded Wolfram 3D histories support all rules 0–255, positionable depth bands,
 and single, random, or explicit-bit source rows. The 3D custom-rule editor,
-fades, and trails remain later milestones.
+trails, gradients, and cell-gap controls remain later milestones. Visual fades
+are implemented for every 2D, 3D, and Wolfram layer family.
 
 ## 1. Summary
 
@@ -437,7 +438,7 @@ Camera angle is derived from presentation time, not the number of calls to `rend
 
 ### 11.5 Visual interpolation
 
-With `fade_rate > 0`, each cell has a visual presence value from 0 through 1 that moves linearly toward its occupied/unoccupied target by `fade_rate * frame_delta_seconds`, clamped at the target. A fading-out cell retains its last state color. With `fade_rate == 0`, visual presence follows the grid immediately.
+With `fade_rate > 0`, each cell has a visual presence value from 0 through 1 that moves linearly toward its occupied/unoccupied target by `fade_rate * frame_delta_seconds`, clamped at the target. Accepted rates range from 0 through 50 presence units per second. A fading-out cell retains its last state color. With `fade_rate == 0`, visual presence follows the grid immediately. Initial cells and voxels begin fully visible at frame zero; interpolation starts at the first simulation transition. Fade state is evaluated across exact generation boundaries so direct timestamp sampling, sequential preview, and export agree.
 
 ## 12. Project file format
 

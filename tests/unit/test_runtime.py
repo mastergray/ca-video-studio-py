@@ -113,6 +113,48 @@ def test_preview_and_export_match_generation_at_same_time() -> None:
     np.testing.assert_array_equal(previewFrame, exportFrame)
 
 
+def test_fade_progress_is_deterministic_across_sampling_intervals() -> None:
+    data = defaultProject().toDict()
+    layer = data["layers"][0]
+    layer["step_interval_ms"] = 1000
+    layer["simulation"]["grid"] = {"size": [8, 8], "boundary": "fixed"}
+    layer["simulation"]["initial"] = {
+        "type": "cells",
+        "origin": "absolute",
+        "cells": [[2, 3], [3, 3], [4, 3]],
+    }
+    layer["render"]["fade_rate"] = 0.7
+    project = parseProject(data)
+    direct = ProjectRuntime(project, (80, 80))
+    sampled = ProjectRuntime(project, (80, 80))
+
+    directFrame = direct.renderAtTick(3, 2)
+    sampled.renderAtTick(1, 2)
+    sampled.renderAtTick(2, 2)
+    sampledFrame = sampled.renderAtTick(3, 2)
+    presence = direct._fadeStates[layer["id"]].presence
+
+    assert presence[3, 2] == np.float32(0.65)
+    assert presence[2, 3] == np.float32(0.35)
+    assert presence[3, 3] == 1
+    assert direct.engine.generation == 1
+    np.testing.assert_array_equal(directFrame, sampledFrame)
+    np.testing.assert_array_equal(presence, sampled._fadeStates[layer["id"]].presence)
+
+
+def test_fade_state_resets_with_the_simulation() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"]["fade_rate"] = 2
+    project = parseProject(data)
+    runtime = ProjectRuntime(project, (320, 180))
+    initial = runtime.renderAtTick(0, 30)
+
+    runtime.renderAtTick(20, 30)
+    reset = runtime.renderAtTick(0, 30)
+
+    np.testing.assert_array_equal(reset, initial)
+
+
 def test_wolfram_and_outer_totalistic_layers_share_independent_timing() -> None:
     data = defaultProject().toDict()
     wolfram = defaultProject().toDict()["layers"][0]

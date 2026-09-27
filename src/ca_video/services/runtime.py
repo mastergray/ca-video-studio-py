@@ -1,6 +1,7 @@
 from __future__ import annotations  # Enable forward references in type annotations
 
 import hashlib  # Derive stable per-layer random seeds
+from fractions import Fraction  # Compare presentation and generation times exactly
 
 import numpy as np  # Create frame buffers and disabled-layer grids
 from numpy.typing import NDArray  # Describe NumPy array types
@@ -12,6 +13,7 @@ from ca_video.config.models import (  # Read validated project and layer setting
     LayerConfig,
     ProjectConfig,
 )
+from ca_video.rendering.fade import FadeState  # Interpolate visual cell and voxel presence
 from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
 from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
 from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Project camera-aware voxels
@@ -47,6 +49,7 @@ class ProjectRuntime:
         self._currentTimebase = 1
         self._engines: dict[str, SimulationEngine] = {}
         self._renderers: dict[str, LayerRenderer] = {}
+        self._fadeStates: dict[str, FadeState] = {}
         self.reset()
 
     #
@@ -94,6 +97,10 @@ class ProjectRuntime:
             layer.id: self._createEngine(layer)
             for layer in self._project.layers
         }
+        self._fadeStates = {
+            layer.id: FadeState(self._engines[layer.id].grid)
+            for layer in self._project.layers
+        }
         self._buildRenderers()
         self._currentFrameIndex = 0
         self._currentTimeTicks = 0
@@ -107,8 +114,13 @@ class ProjectRuntime:
         resetSimulation: bool,
         renderSize: tuple[int, int] | None = None,
     ) -> NDArray[np.uint8]:
+        previousProject = self._project
         previousIds = tuple(layer.id for layer in self._project.layers)
         nextIds = tuple(layer.id for layer in project.layers)
+        if not resetSimulation and previousIds == nextIds:
+            presentationSeconds = self._currentTimeTicks / self._currentTimebase
+            for layer in previousProject.layers:
+                self._fadeStates[layer.id].rebase(layer.fadeRate, presentationSeconds)
         self._project = project
         if renderSize is not None:
             self._usesProjectSize = False
@@ -133,15 +145,14 @@ class ProjectRuntime:
             raise ValueError("tick index must not be negative")
         if ticksPerSecond < 1:
             raise ValueError("timebase must be positive")
-        if tickIndex * self._currentTimebase < self._currentTimeTicks * ticksPerSecond:
+        targetTime = Fraction(tickIndex, ticksPerSecond)
+        currentTime = Fraction(self._currentTimeTicks, self._currentTimebase)
+        if targetTime < currentTime:
             self.reset()
         for layer in self._project.layers:
             if not layer.enabled:
                 continue
-            engine = self._engines[layer.id]
-            targetGeneration = self._generationDue(layer, tickIndex, ticksPerSecond)
-            while engine.generation < targetGeneration:
-                engine.step()
+            self._advanceLayerTo(layer, targetTime)
         self._currentTimeTicks = tickIndex
         self._currentTimebase = ticksPerSecond
         self._currentFrameIndex = (tickIndex * self._project.output.fps) // ticksPerSecond
@@ -151,11 +162,13 @@ class ProjectRuntime:
     # Advances every enabled layer by exactly one generation
     def stepOnce(self) -> NDArray[np.uint8]:
         frameCandidates = [self._currentFrameIndex]
+        transitionSeconds = self._currentTimeTicks / self._currentTimebase
         for layer in self._project.layers:
             if not layer.enabled:
                 continue
             engine = self._engines[layer.id]
             engine.step()
+            self._fadeStates[layer.id].transition(engine.grid, layer.fadeRate, transitionSeconds)
             numerator = engine.generation * layer.stepIntervalMs * self._project.output.fps
             frameCandidates.append((numerator + 999) // 1000)
         self._currentFrameIndex = max(frameCandidates)
@@ -330,15 +343,29 @@ class ProjectRuntime:
         for _, layer in sorted(indexedLayers, key=lambda item: (item[1].zIndex, item[0])):
             if not layer.enabled:
                 continue
+            fadeState = self._fadeStates[layer.id]
+            fadeState.sample(self._engines[layer.id].grid, layer.fadeRate, presentationSeconds)
             rendered = self._renderers[layer.id].renderLayer(
                 self._engines[layer.id].grid,
                 presentationSeconds,
+                fadeState.presence if layer.fadeRate > 0 else None,
+                fadeState.displayGrid if layer.fadeRate > 0 else None,
             )
             alpha = rendered[..., 3:4]
             frame = frame * (1.0 - alpha) + rendered[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: layerConfig, INT, INT -> INT
-    # Calculates the generation due at a rational presentation time
-    def _generationDue(self, layer: LayerConfig, tickIndex: int, ticksPerSecond: int) -> int:
-        return (tickIndex * 1000) // (layer.stepIntervalMs * ticksPerSecond)
+    # :: layerConfig, fraction -> NONE
+    # Evolves one layer and its visual fade state through exact generation boundaries
+    def _advanceLayerTo(
+        self,
+        layer: LayerConfig,
+        targetTime: Fraction,
+    ) -> None:
+        engine = self._engines[layer.id]
+        fadeState = self._fadeStates[layer.id]
+        nextGenerationTime = Fraction((engine.generation + 1) * layer.stepIntervalMs, 1000)
+        while nextGenerationTime <= targetTime:
+            engine.step()
+            fadeState.transition(engine.grid, layer.fadeRate, float(nextGenerationTime))
+            nextGenerationTime = Fraction((engine.generation + 1) * layer.stepIntervalMs, 1000)

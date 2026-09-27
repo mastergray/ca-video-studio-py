@@ -37,27 +37,36 @@ class Renderer3D:
     # Instance Methods
     #
 
-    # :: grid3D, FLOAT -> rgbaFrame
+    # :: grid3D, FLOAT, presence?, grid3D? -> rgbaFrame
     # Renders occupied voxels into a transparent layer
-    def renderLayer(self, grid: NDArray[np.uint8], presentationSeconds: float = 0) -> RGBAFrame:
+    def renderLayer(
+        self,
+        grid: NDArray[np.uint8],
+        presentationSeconds: float = 0,
+        presence: NDArray[np.float32] | None = None,
+        displayGrid: NDArray[np.uint8] | None = None,
+    ) -> RGBAFrame:
         if grid.ndim != 3 or len(set(grid.shape)) != 1:
             raise ValueError("3D renderer requires a cubic voxel grid")
         image = QImage(self._width, self._height, QImage.Format.Format_RGBA8888)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
 
         gridSize = grid.shape[0]
         tileWidth = self._voxelScale or max(2, int(min(self._width, self._height) * 0.45 / gridSize))
         tileHeight = max(1, tileWidth // 2)
         originX = self._width / 2
         originY = self._height / 2
-        coordinates = self._visibleCoordinates(grid)
+        visualGrid = displayGrid if displayGrid is not None else grid
+        coordinates = self._visibleCoordinates(visualGrid, presence)
         maximumZ = max(gridSize - 1, 1)
         colorsByZ: dict[int, tuple[QColor, QColor, QColor, QColor]] = {}
 
         for zValue, yValue, xValue in coordinates:
             zIndex, yIndex, xIndex = int(zValue), int(yValue), int(xValue)
+            painter.setOpacity(float(presence[zIndex, yIndex, xIndex]) if presence is not None else 1)
             if zIndex not in colorsByZ:
                 brightness = 0.35 + 0.65 * zIndex / maximumZ
                 colorsByZ[zIndex] = (
@@ -83,13 +92,18 @@ class Renderer3D:
     # Protected Methods
     #
 
-    # :: grid3D -> array
+    # :: grid3D, presence? -> array
     # Extracts occupied or surface coordinates in painter depth order
-    def _visibleCoordinates(self, grid: NDArray[np.uint8]) -> NDArray[np.int64]:
-        occupied = grid > 0
+    def _visibleCoordinates(
+        self,
+        grid: NDArray[np.uint8],
+        presence: NDArray[np.float32] | None = None,
+    ) -> NDArray[np.int64]:
+        occupied = presence > 1e-6 if presence is not None else grid > 0
         visible = occupied
         if self._surfaceOnly:
-            neighbors = self._orthogonalOccupancy(occupied)
+            solid = presence >= 0.5 if presence is not None else occupied
+            neighbors = self._orthogonalOccupancy(solid)
             visible = occupied & (neighbors < 6)
         coordinates = np.argwhere(visible)
         if not len(coordinates):

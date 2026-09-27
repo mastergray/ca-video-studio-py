@@ -221,6 +221,7 @@ class PropertyInspector(QWidget):
             self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
 
         self._opacity.setValue(layer.opacity)
+        self._fadeRate.setValue(layer.fadeRate)
         self._stepInterval.setValue(layer.stepIntervalMs)
         self._syncDimensionControls()
         self._syncSeedControls()
@@ -329,6 +330,7 @@ class PropertyInspector(QWidget):
             simulationData["initial"] = self._initialData()
             layerData["render"]["color"] = self._liveColor.color
             layerData["render"]["layout"] = self._layout.currentData()
+        layerData["render"]["fade_rate"] = self._fadeRate.value()
         layerData["opacity"] = self._opacity.value()
         layerData["step_interval_ms"] = self._stepInterval.value()
         return data
@@ -489,6 +491,8 @@ class PropertyInspector(QWidget):
         self._opacity.setRange(0, 1)
         self._opacity.setSingleStep(0.05)
         self._opacity.setDecimals(2)
+        self._fadeRate = self._doubleSpinBox(0, 50, 0.5, " /s")
+        self._fadeRate.setToolTip("Cell or voxel visual interpolation speed; zero is instant")
         self._layout = QComboBox()
         self._layout.addItem("Fit", "fit")
         self._layout.addItem("Cover", "cover")
@@ -510,6 +514,7 @@ class PropertyInspector(QWidget):
         self._vignette = QCheckBox("Darken canvas edges")
         appearanceForm.addRow("Live color", self._liveColor)
         appearanceForm.addRow("Opacity", self._opacity)
+        appearanceForm.addRow("Fade rate", self._fadeRate)
         appearanceForm.addRow("Layout", self._layout)
         appearanceForm.addRow("3D renderer", self._renderStyle3D)
         appearanceForm.addRow("Face palette", self._palette3D)
@@ -587,6 +592,7 @@ class PropertyInspector(QWidget):
         self._rle.textChanged.connect(self._queueTextChange)
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
         self._opacity.valueChanged.connect(lambda _value: self._emitChange(False))
+        self._fadeRate.valueChanged.connect(lambda _value: self._emitChange(False))
         self._layout.currentIndexChanged.connect(self._layoutChanged)
         self._palette3D.currentIndexChanged.connect(lambda _value: self._emitChange(False))
         self._renderStyle3D.currentIndexChanged.connect(self._renderStyleChanged)

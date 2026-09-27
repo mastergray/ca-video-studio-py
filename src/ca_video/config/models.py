@@ -297,7 +297,7 @@ class Initial2DConfig:
 # Stores validated settings for an outer-totalistic or Wolfram 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT? -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT?, FLOAT -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -320,6 +320,7 @@ class Layer2DConfig:
         cellSizePx: int | None = None,
         simulationMode: str = "outer_totalistic",
         wolframRule: int | None = None,
+        fadeRate: float = 0,
     ) -> None:
         self._id = id
         self._name = name
@@ -340,6 +341,7 @@ class Layer2DConfig:
         self._cellSizePx = cellSizePx
         self._simulationMode = simulationMode
         self._wolframRule = wolframRule
+        self._fadeRate = fadeRate
 
     #
     # Properties
@@ -464,6 +466,12 @@ class Layer2DConfig:
     @property
     def wolframRule(self) -> int | None:
         return self._wolframRule
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns visual interpolation speed in presence units per second
+    @property
+    def fadeRate(self) -> float:
+        return self._fadeRate
 
 
 # Stores validated settings for a three-dimensional initializer
@@ -609,7 +617,7 @@ class CameraConfig:
 # Stores validated settings for a three-dimensional voxel layer
 class Layer3DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule?, STRING?, initial3DConfig, INT?, STRING, INT, BOOL, STRING, STRING, BOOL, BOOL, cameraConfig?, STRING, INT?, INT, INT -> layer3DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, STRING, outerTotalisticRule?, STRING?, initial3DConfig, INT?, STRING, INT, BOOL, STRING, STRING, BOOL, BOOL, cameraConfig?, STRING, INT?, INT, INT, FLOAT -> layer3DConfig
     # Creates immutable-by-convention 3D layer settings
     def __init__(
         self,
@@ -637,6 +645,7 @@ class Layer3DConfig:
         wolframRule: int | None = None,
         extrusionDepth: int = 1,
         extrusionOffset: int = 0,
+        fadeRate: float = 0,
     ) -> None:
         self._id = id
         self._name = name
@@ -662,6 +671,7 @@ class Layer3DConfig:
         self._wolframRule = wolframRule
         self._extrusionDepth = extrusionDepth
         self._extrusionOffset = extrusionOffset
+        self._fadeRate = fadeRate
 
     # PROPERTY :: VOID -> STRING
     # Returns the layer dimensionality
@@ -812,6 +822,12 @@ class Layer3DConfig:
     @property
     def extrusionOffset(self) -> int:
         return self._extrusionOffset
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns visual interpolation speed in presence units per second
+    @property
+    def fadeRate(self) -> float:
+        return self._fadeRate
 
 
 LayerConfig = Layer2DConfig | Layer3DConfig
@@ -986,6 +1002,8 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
             "voxel_scale": layer.voxelScale or "auto",
             "surface_only": layer.surfaceOnly,
         }
+        if layer.fadeRate:
+            renderData["fade_rate"] = layer.fadeRate
         if layer.renderStyle == "projected_voxel":
             renderData.update(
                 {
@@ -1083,6 +1101,7 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
             "style": "cells",
             "color": colorToHex(layer.liveColor),
             "layout": layer.layout,
+            **({"fade_rate": layer.fadeRate} if layer.fadeRate else {}),
         },
     }
 
@@ -1293,6 +1312,7 @@ def _parseLayer3D(
             "depth_shading",
             "vignette",
             "camera",
+            "fade_rate",
         },
         "layers[0].render",
     )
@@ -1325,6 +1345,7 @@ def _parseLayer3D(
     vignette = render.get("vignette", False)
     if not isinstance(vignette, bool):
         raise ConfigError("layers[0].render.vignette must be true or false")
+    fadeRate = _asNumber(render.get("fade_rate", 0), "layers[0].render.fade_rate", 0, 50)
     camera = (
         _parseCamera(render["camera"], "layers[0].render.camera", projectCamera)
         if "camera" in render
@@ -1359,6 +1380,7 @@ def _parseLayer3D(
         wolframRule,
         extrusionDepth,
         extrusionOffset,
+        fadeRate,
     )
 
 
@@ -1698,13 +1720,14 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     )
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
-    _rejectUnknown(render, {"style", "color", "layout"}, "layers[0].render")
+    _rejectUnknown(render, {"style", "color", "layout", "fade_rate"}, "layers[0].render")
     if render.get("style", "cells") != "cells":
         raise ConfigError("the current milestone supports only the cells render style")
     liveColor = _asColor(render.get("color", "#e8f4ff"), "layers[0].render.color")
     layout = render.get("layout", "fit")
     if layout not in {"fit", "cover"}:
         raise ConfigError("layers[0].render.layout must be fit or cover")
+    fadeRate = _asNumber(render.get("fade_rate", 0), "layers[0].render.fade_rate", 0, 50)
 
     layer = Layer2DConfig(
         layerId,
@@ -1726,6 +1749,7 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         cellSize,
         simulationMode,
         wolframRule,
+        fadeRate,
     )
     return _completeProject(
         root,
