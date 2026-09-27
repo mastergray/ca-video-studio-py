@@ -155,6 +155,33 @@ def test_fade_state_resets_with_the_simulation() -> None:
     np.testing.assert_array_equal(reset, initial)
 
 
+def test_trail_decay_is_deterministic_across_preview_and_export_rates() -> None:
+    data = defaultProject().toDict()
+    layer = data["layers"][0]
+    layer["step_interval_ms"] = 1000
+    layer["simulation"]["grid"] = {"size": [8, 8], "boundary": "fixed"}
+    layer["simulation"]["initial"] = {
+        "type": "cells",
+        "origin": "absolute",
+        "cells": [[2, 3], [3, 3], [4, 3]],
+    }
+    layer["render"].update({"trail": 0.83, "trail_color": "#2f5fb0"})
+    project = parseProject(data)
+    direct = ProjectRuntime(project, (80, 80))
+    sampled = ProjectRuntime(project, (80, 80))
+
+    directFrame = direct.renderAtTick(45, 30)
+    for tickIndex in range(1, 91):
+        sampledFrame = sampled.renderAtTick(tickIndex, 60)
+    directTrail = direct._trailStates[layer["id"]].values
+    sampledTrail = sampled._trailStates[layer["id"]].values
+
+    np.testing.assert_allclose(directTrail[3, 2], 0.83**15)
+    assert directTrail[2, 3] == 1
+    np.testing.assert_array_equal(directTrail, sampledTrail)
+    np.testing.assert_array_equal(directFrame, sampledFrame)
+
+
 def test_wolfram_and_outer_totalistic_layers_share_independent_timing() -> None:
     data = defaultProject().toDict()
     wolfram = defaultProject().toDict()["layers"][0]

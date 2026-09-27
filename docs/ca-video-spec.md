@@ -15,8 +15,9 @@ pan, height/distance/state/fixed coloring, depth shading, vignetting, automatic
 or fixed voxel scale, and optional surface extraction. Reference-compatible
 extruded Wolfram 3D histories support all rules 0–255, positionable depth bands,
 and single, random, or explicit-bit source rows. The 3D custom-rule editor,
-trails, gradients, and cell-gap controls remain later milestones. Visual fades
-are implemented for every 2D, 3D, and Wolfram layer family.
+gradients, and cell-gap controls remain later milestones. Visual fades are
+implemented for every layer family, and deterministic trails are implemented
+for 2D outer-totalistic and Wolfram layers.
 
 ## 1. Summary
 
@@ -397,6 +398,16 @@ The 2D renderer supports:
 - Visual fade rate in units per second; 0 means hard transitions.
 
 Trail memory and fade interpolation are visual-only and never influence the automaton. Fade advances per video frame, making it smooth even when simulation steps are infrequent.
+
+The 2D `trail` value is retention per reference 30 fps frame: `0` disables
+history, `1` retains it indefinitely, and intermediate values decay
+exponentially. Runtime evaluation uses elapsed presentation time, so an amount
+such as `0.86` has the proof-of-concept look without changing speed between a
+30 fps preview and a 60 fps export. `trail_color` defaults to `#233a6b`.
+State-one cells refresh trail memory to full strength. Generations decay states
+render normally; their stored trail becomes visible only after the cell reaches
+state zero. When fade and trail are both enabled, the trail is composited below
+the fading live-cell color.
 
 ### 11.3 3D render styles
 

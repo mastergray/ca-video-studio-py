@@ -297,7 +297,7 @@ class Initial2DConfig:
 # Stores validated settings for an outer-totalistic or Wolfram 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT?, FLOAT -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT?, FLOAT, FLOAT, (INT, INT, INT) -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -321,6 +321,8 @@ class Layer2DConfig:
         simulationMode: str = "outer_totalistic",
         wolframRule: int | None = None,
         fadeRate: float = 0,
+        trail: float = 0,
+        trailColor: tuple[int, int, int] = (35, 58, 107),
     ) -> None:
         self._id = id
         self._name = name
@@ -342,6 +344,8 @@ class Layer2DConfig:
         self._simulationMode = simulationMode
         self._wolframRule = wolframRule
         self._fadeRate = fadeRate
+        self._trail = trail
+        self._trailColor = trailColor
 
     #
     # Properties
@@ -472,6 +476,18 @@ class Layer2DConfig:
     @property
     def fadeRate(self) -> float:
         return self._fadeRate
+
+    # PROPERTY :: VOID -> FLOAT
+    # Returns the two-dimensional trail retention per reference frame
+    @property
+    def trail(self) -> float:
+        return self._trail
+
+    # PROPERTY :: VOID -> (INT, INT, INT)
+    # Returns the RGB color used by historical live-cell trails
+    @property
+    def trailColor(self) -> tuple[int, int, int]:
+        return self._trailColor
 
 
 # Stores validated settings for a three-dimensional initializer
@@ -1102,6 +1118,12 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
             "color": colorToHex(layer.liveColor),
             "layout": layer.layout,
             **({"fade_rate": layer.fadeRate} if layer.fadeRate else {}),
+            **({"trail": layer.trail} if layer.trail else {}),
+            **(
+                {"trail_color": colorToHex(layer.trailColor)}
+                if layer.trail or layer.trailColor != (35, 58, 107)
+                else {}
+            ),
         },
     }
 
@@ -1720,7 +1742,11 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     )
 
     render = _asMapping(layerData.get("render"), "layers[0].render")
-    _rejectUnknown(render, {"style", "color", "layout", "fade_rate"}, "layers[0].render")
+    _rejectUnknown(
+        render,
+        {"style", "color", "layout", "fade_rate", "trail", "trail_color"},
+        "layers[0].render",
+    )
     if render.get("style", "cells") != "cells":
         raise ConfigError("the current milestone supports only the cells render style")
     liveColor = _asColor(render.get("color", "#e8f4ff"), "layers[0].render.color")
@@ -1728,6 +1754,8 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     if layout not in {"fit", "cover"}:
         raise ConfigError("layers[0].render.layout must be fit or cover")
     fadeRate = _asNumber(render.get("fade_rate", 0), "layers[0].render.fade_rate", 0, 50)
+    trail = _asNumber(render.get("trail", 0), "layers[0].render.trail", 0, 1)
+    trailColor = _asColor(render.get("trail_color", "#233a6b"), "layers[0].render.trail_color")
 
     layer = Layer2DConfig(
         layerId,
@@ -1750,6 +1778,8 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         simulationMode,
         wolframRule,
         fadeRate,
+        trail,
+        trailColor,
     )
     return _completeProject(
         root,

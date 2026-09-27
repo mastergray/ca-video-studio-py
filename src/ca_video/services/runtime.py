@@ -17,6 +17,7 @@ from ca_video.rendering.fade import FadeState  # Interpolate visual cell and vox
 from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
 from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
 from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Project camera-aware voxels
+from ca_video.rendering.trail import TrailState  # Retain deterministic 2D live-cell history
 from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
 from ca_video.simulation.initialization_3d import initializeGrid3D  # Build starting voxel grids
 from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
@@ -50,6 +51,7 @@ class ProjectRuntime:
         self._engines: dict[str, SimulationEngine] = {}
         self._renderers: dict[str, LayerRenderer] = {}
         self._fadeStates: dict[str, FadeState] = {}
+        self._trailStates: dict[str, TrailState] = {}
         self.reset()
 
     #
@@ -101,6 +103,11 @@ class ProjectRuntime:
             layer.id: FadeState(self._engines[layer.id].grid)
             for layer in self._project.layers
         }
+        self._trailStates = {
+            layer.id: TrailState(self._engines[layer.id].grid)
+            for layer in self._project.layers
+            if isinstance(layer, Layer2DConfig)
+        }
         self._buildRenderers()
         self._currentFrameIndex = 0
         self._currentTimeTicks = 0
@@ -121,6 +128,8 @@ class ProjectRuntime:
             presentationSeconds = self._currentTimeTicks / self._currentTimebase
             for layer in previousProject.layers:
                 self._fadeStates[layer.id].rebase(layer.fadeRate, presentationSeconds)
+                if isinstance(layer, Layer2DConfig):
+                    self._trailStates[layer.id].rebase(layer.trail, presentationSeconds)
         self._project = project
         if renderSize is not None:
             self._usesProjectSize = False
@@ -169,6 +178,8 @@ class ProjectRuntime:
             engine = self._engines[layer.id]
             engine.step()
             self._fadeStates[layer.id].transition(engine.grid, layer.fadeRate, transitionSeconds)
+            if isinstance(layer, Layer2DConfig):
+                self._trailStates[layer.id].transition(engine.grid, layer.trail, transitionSeconds)
             numerator = engine.generation * layer.stepIntervalMs * self._project.output.fps
             frameCandidates.append((numerator + 999) // 1000)
         self._currentFrameIndex = max(frameCandidates)
@@ -330,6 +341,7 @@ class ProjectRuntime:
                     layer.opacity,
                     layer.layout,
                     layer.rule.states if layer.rule is not None else 2,
+                    layer.trailColor,
                 )
         self._renderers = renderers
 
@@ -345,12 +357,26 @@ class ProjectRuntime:
                 continue
             fadeState = self._fadeStates[layer.id]
             fadeState.sample(self._engines[layer.id].grid, layer.fadeRate, presentationSeconds)
-            rendered = self._renderers[layer.id].renderLayer(
-                self._engines[layer.id].grid,
-                presentationSeconds,
-                fadeState.presence if layer.fadeRate > 0 else None,
-                fadeState.displayGrid if layer.fadeRate > 0 else None,
-            )
+            if isinstance(layer, Layer2DConfig):
+                trailState = self._trailStates[layer.id]
+                trailState.sample(layer.trail, presentationSeconds)
+                renderer = self._renderers[layer.id]
+                if not isinstance(renderer, Renderer2D):
+                    raise TypeError("2D layer is missing its 2D renderer")
+                rendered = renderer.renderLayer(
+                    self._engines[layer.id].grid,
+                    presentationSeconds,
+                    fadeState.presence if layer.fadeRate > 0 else None,
+                    fadeState.displayGrid if layer.fadeRate > 0 else None,
+                    trailState.values if layer.trail > 0 else None,
+                )
+            else:
+                rendered = self._renderers[layer.id].renderLayer(
+                    self._engines[layer.id].grid,
+                    presentationSeconds,
+                    fadeState.presence if layer.fadeRate > 0 else None,
+                    fadeState.displayGrid if layer.fadeRate > 0 else None,
+                )
             alpha = rendered[..., 3:4]
             frame = frame * (1.0 - alpha) + rendered[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
@@ -368,4 +394,10 @@ class ProjectRuntime:
         while nextGenerationTime <= targetTime:
             engine.step()
             fadeState.transition(engine.grid, layer.fadeRate, float(nextGenerationTime))
+            if isinstance(layer, Layer2DConfig):
+                self._trailStates[layer.id].transition(
+                    engine.grid,
+                    layer.trail,
+                    float(nextGenerationTime),
+                )
             nextGenerationTime = Fraction((engine.generation + 1) * layer.stepIntervalMs, 1000)

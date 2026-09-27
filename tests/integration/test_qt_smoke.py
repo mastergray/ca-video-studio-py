@@ -40,11 +40,18 @@ def test_fade_rate_is_a_visual_edit_that_preserves_simulation_state() -> None:
     generation = window.runtime.engine.generation
 
     window.inspector._fadeRate.setValue(6.5)
+    window.inspector._trail.setValue(0.86)
+    window.inspector._trailColor.setColor("#2f5fb0")
+    window.inspector._trailColor.colorChanged.emit("#2f5fb0")
     app.processEvents()
 
     assert window.project.layer.fadeRate == 6.5
+    assert window.project.layer.trail == 0.86
+    assert window.project.layer.trailColor == (47, 95, 176)
     assert window.runtime.engine.generation == generation
     assert window.inspector._fadeRate.isVisibleTo(window.inspector)
+    assert window.inspector._trail.isVisibleTo(window.inspector)
+    assert window.inspector._trailColor.isVisibleTo(window.inspector)
     window._setDirty(False)
     window.close()
 
@@ -274,6 +281,8 @@ def test_add_and_edit_3d_layer() -> None:
     assert inspector._offsetY3D.isVisibleTo(inspector)
     assert inspector._offsetZ3D.isVisibleTo(inspector)
     assert inspector._fadeRate.isVisibleTo(inspector)
+    assert not inspector._trail.isVisibleTo(inspector)
+    assert not inspector._trailColor.isVisibleTo(inspector)
     assert not inspector._simulationMode.isVisibleTo(inspector)
     window._setDirty(False)
     window.close()

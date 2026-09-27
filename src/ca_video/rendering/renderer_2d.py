@@ -27,7 +27,7 @@ def scaledGridSize(
 # Converts a two-dimensional cell grid into an exact-size RGB frame
 class Renderer2D:
 
-    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING, INT -> renderer2D
+    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING, INT, (INT, INT, INT) -> renderer2D
     # Creates a nearest-neighbor 2D renderer
     def __init__(
         self,
@@ -38,6 +38,7 @@ class Renderer2D:
         opacity: float = 1.0,
         layout: str = "fit",
         states: int = 2,
+        trailColor: tuple[int, int, int] = (35, 58, 107),
     ) -> None:
         self._width = width
         self._height = height
@@ -46,6 +47,7 @@ class Renderer2D:
         self._opacity = opacity
         self._layout = layout
         self._states = states
+        self._trailColor = np.asarray(trailColor, dtype=np.float32)
 
     #
     # Instance Methods
@@ -59,7 +61,7 @@ class Renderer2D:
         frame = self._background * (1.0 - alpha) + layer[..., :3] * alpha
         return frame.clip(0, 255).astype(np.uint8)
 
-    # :: grid, FLOAT, presence?, grid? -> rgbaFrame
+    # :: grid, FLOAT, presence?, grid?, trailBuffer? -> rgbaFrame
     # Renders transparent color and alpha for project composition
     def renderLayer(
         self,
@@ -67,6 +69,7 @@ class Renderer2D:
         presentationSeconds: float = 0,
         presence: NDArray[np.float32] | None = None,
         displayGrid: NDArray[np.uint8] | None = None,
+        trailValues: NDArray[np.float32] | None = None,
     ) -> RGBAFrame:
         gridHeight, gridWidth = grid.shape
         renderWidth, renderHeight = scaledGridSize(
@@ -84,11 +87,23 @@ class Renderer2D:
         if self._states > 2:
             decaying = resized >= 2
             intensity[decaying] = (self._states - resized[decaying]) / (self._states - 1)
-        layer = np.empty((renderHeight, renderWidth, 4), dtype=np.float32)
-        layer[..., :3] = self._liveColor
         if presence is not None:
             intensity *= self._resizeNearest(presence, renderWidth, renderHeight)
-        layer[..., 3] = intensity * self._opacity
+        trailPresence = np.zeros_like(intensity)
+        if trailValues is not None:
+            currentGrid = self._resizeNearest(grid, renderWidth, renderHeight)
+            resizedTrail = self._resizeNearest(trailValues, renderWidth, renderHeight)
+            trailPresence[currentGrid == 0] = resizedTrail[currentGrid == 0]
+        combinedPresence = intensity + trailPresence * (1 - intensity)
+        premultiplied = (
+            self._liveColor * intensity[..., None]
+            + self._trailColor * (trailPresence * (1 - intensity))[..., None]
+        )
+        layer = np.empty((renderHeight, renderWidth, 4), dtype=np.float32)
+        layer[..., :3] = self._liveColor
+        visible = combinedPresence > 0
+        layer[visible, :3] = premultiplied[visible] / combinedPresence[visible, None]
+        layer[..., 3] = combinedPresence * self._opacity
 
         if self._layout == "cover":
             offsetX = max(0, (renderWidth - self._width) // 2)

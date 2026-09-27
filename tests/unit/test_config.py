@@ -37,6 +37,32 @@ def test_layer_fade_rate_is_limited_to_reference_range() -> None:
         parseProject(data)
 
 
+def test_2d_trail_settings_round_trip_and_defaults_are_omitted() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"].update(
+        {"trail": 0.86, "trail_color": "#2f5fb0"}
+    )
+
+    project = parseProject(data)
+    normalized = project.toDict()["layers"][0]["render"]
+
+    assert project.layer.trail == 0.86
+    assert project.layer.trailColor == (47, 95, 176)
+    assert normalized["trail"] == 0.86
+    assert normalized["trail_color"] == "#2f5fb0"
+    defaultRender = defaultProject().toDict()["layers"][0]["render"]
+    assert "trail" not in defaultRender
+    assert "trail_color" not in defaultRender
+
+
+def test_2d_trail_amount_must_be_between_zero_and_one() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"]["trail"] = 1.01
+
+    with pytest.raises(ConfigError, match="between 0 and 1"):
+        parseProject(data)
+
+
 def test_non_integral_frame_count_is_rejected() -> None:
     project = defaultProject()
     invalid = project.output.withOverrides(durationSeconds=1.01)
