@@ -16,7 +16,8 @@ native project editing and persistence, preview controls, mixed-dimensional
 composition, and H.264 MP4 export through FFmpeg share one deterministic
 pipeline. The broader product is defined in
 [`docs/ca-video-spec.md`](docs/ca-video-spec.md); the desktop layout is defined
-in [`docs/native-ui-design.md`](docs/native-ui-design.md).
+in [`docs/native-ui-design.md`](docs/native-ui-design.md); and upcoming work is
+ordered in [`ROADMAP.md`](ROADMAP.md).
 
 The editor preview is capped at 640×360 and 30 fps. Export resolution and frame
 rate are applied only during offline video rendering.
