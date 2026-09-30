@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "Brian's Brain — State Gradient",
+    "seed": 29
+  },
+  "output": {
+    "path": "../renders/state-gradient.mp4",
+    "width": 640,
+    "height": 360,
+    "fps": 30,
+    "duration_seconds": 5,
+    "codec": "h264",
+    "crf": 18,
+    "encoder_preset": "medium"
+  },
+  "canvas": {
+    "background": "#070b18"
+  },
+  "layers": [
+    {
+      "id": "brian_gradient",
+      "name": "Brian's Brain",
+      "enabled": true,
+      "dimension": "2d",
+      "z_index": 0,
+      "opacity": 1,
+      "step_interval_ms": 100,
+      "simulation": {
+        "mode": "outer_totalistic",
+        "grid": {
+          "size": [160, 90],
+          "boundary": "wrap"
+        },
+        "rule": {
+          "preset": "brian"
+        },
+        "initial": {
+          "type": "random",
+          "density": 0.2
+        }
+      },
+      "render": {
+        "style": "cells",
+        "color": "#ffffff",
+        "color_mode": "state_gradient",
+        "gradient": ["#fff2c2", "#37d5ff", "#24438f"],
+        "layout": "fit",
+        "fade_rate": 8,
+        "trail": 0.72,
+        "trail_color": "#17234f"
+      }
+    }
+  ]
+}

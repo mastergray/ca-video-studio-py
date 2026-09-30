@@ -11,7 +11,8 @@ rotation, positional coloring, and depth buffering.
 Global and optional per-layer seeds, multiple initial-condition types,
 simulation-space offsets for geometric 3D seeds and Wolfram extrusion bands,
 deterministic per-cell and per-voxel visual fading,
-time-based 2D trails with configurable retention and color,
+time-based 2D trails with configurable retention and color, native 2D solid or
+editable state-gradient coloring,
 native project editing and persistence, preview controls, mixed-dimensional
 composition, and H.264 MP4 export through FFmpeg share one deterministic
 pipeline. The broader product is defined in
@@ -45,6 +46,12 @@ Open the layered example:
 
 ```bash
 uv run ca-video gui examples/layered-life.cav.json
+```
+
+Open the 2D state-gradient example:
+
+```bash
+uv run ca-video gui examples/state-gradient.cav.json
 ```
 
 Open the Wolfram Rule 30 example:

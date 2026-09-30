@@ -1,8 +1,8 @@
 # CA Video Generator — Product and Technical Specification
 
 Status: Draft for implementation
-Version: 0.3
-Date: 2026-09-26
+Version: 0.4
+Date: 2026-09-29
 
 Current implementation milestone: deterministic 2D, Wolfram 2D, and
 outer-totalistic 3D layers can be mixed, previewed, saved, reopened, and
@@ -14,10 +14,11 @@ support orthographic or perspective cameras, timestamp-based rotation, zoom,
 pan, height/distance/state/fixed coloring, depth shading, vignetting, automatic
 or fixed voxel scale, and optional surface extraction. Reference-compatible
 extruded Wolfram 3D histories support all rules 0–255, positionable depth bands,
-and single, random, or explicit-bit source rows. The 3D custom-rule editor,
-gradients, and cell-gap controls remain later milestones. Visual fades are
-implemented for every layer family, and deterministic trails are implemented
-for 2D outer-totalistic and Wolfram layers.
+and single, random, or explicit-bit source rows. Two-dimensional layers support
+solid coloring and editable state gradients. The 3D custom-rule editor and
+cell-gap controls remain later milestones. Visual fades are implemented for
+every layer family, and deterministic trails are implemented for 2D
+outer-totalistic and Wolfram layers.
 
 ## 1. Summary
 
@@ -399,6 +400,16 @@ The 2D renderer supports:
 
 Trail memory and fade interpolation are visual-only and never influence the automaton. Fade advances per video frame, making it smooth even when simulation steps are infrequent.
 
+The optional `render.color_mode` is `solid` by default and uses `render.color`.
+`state_gradient` requires `render.gradient`, an ordered list of two through
+eight `#RRGGBB` stops. The renderer interpolates those stops evenly across the
+rule's nonzero states: state 1 receives the first color and the final decay
+state receives the last. Intermediate stops shape the interpolation. A binary
+rule has only state 1 and therefore uses the first stop. Gradient states remain
+fully opaque before layer opacity and fade presence are applied; their colors,
+rather than additional alpha reduction, communicate state progression. Solid
+Generations rendering retains its existing state-based alpha reduction.
+
 The 2D `trail` value is retention per reference 30 fps frame: `0` disables
 history, `1` retains it indefinitely, and intermediate values decay
 exponentially. Runtime evaluation uses elapsed presentation time, so an amount
@@ -519,6 +530,8 @@ With `fade_rate > 0`, each cell has a visual presence value from 0 through 1 tha
       "render": {
         "style": "cells",
         "color": "#00ffaa",
+        "color_mode": "state_gradient",
+        "gradient": ["#ffffff", "#3aa0ff", "#1b2a55"],
         "layout": "cover",
         "fade_rate": 0,
         "trail": 0.75,

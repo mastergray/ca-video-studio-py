@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (  # Build the project and layer inspector forms
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
@@ -92,6 +93,112 @@ class ColorButton(QPushButton):
         color = QColor(self._color)
         luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
         return "#0e1214" if luminance > 150 else "#f2f7f7"
+
+
+# Edits an ordered list of native color-picker gradient stops
+class GradientEditor(QWidget):
+
+    # Class Variables
+    colorsChanged = Signal()
+
+    # CONSTRUCTOR :: (STRING), widget? -> gradientEditor
+    # Creates an editor supporting between two and eight color stops
+    def __init__(self, colors: tuple[str, ...], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._colors = list(colors)
+        self._buttons: list[ColorButton] = []
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(4)
+        self._rebuild()
+
+    #
+    # Properties
+    #
+
+    # PROPERTY :: VOID -> (STRING)
+    # Returns normalized ordered gradient stop colors
+    @property
+    def colors(self) -> tuple[str, ...]:
+        return tuple(self._colors)
+
+    #
+    # Instance Methods
+    #
+
+    # :: (STRING) -> NONE
+    # Replaces all displayed stops without publishing an edit
+    def setColors(self, colors: tuple[str, ...]) -> None:
+        self._colors = [QColor(color).name() for color in colors]
+        self._rebuild()
+
+    #
+    # Protected Methods
+    #
+
+    # :: VOID -> NONE
+    # Recreates the compact native stop controls
+    def _rebuild(self) -> None:
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._buttons = []
+        for index, color in enumerate(self._colors):
+            row = QWidget()
+            rowLayout = QHBoxLayout(row)
+            rowLayout.setContentsMargins(0, 0, 0, 0)
+            label = QLabel(self._stopLabel(index))
+            button = ColorButton(color)
+            remove = QPushButton("Remove")
+            remove.setEnabled(len(self._colors) > 2)
+            button.colorChanged.connect(
+                lambda value, stopIndex=index: self._changeColor(stopIndex, value)
+            )
+            remove.clicked.connect(lambda _checked=False, stopIndex=index: self._removeStop(stopIndex))
+            rowLayout.addWidget(label)
+            rowLayout.addWidget(button, 1)
+            rowLayout.addWidget(remove)
+            self._buttons.append(button)
+            self._layout.addWidget(row)
+        self._addButton = QPushButton("Add stop")
+        self._addButton.setEnabled(len(self._colors) < 8)
+        self._addButton.clicked.connect(self._addStop)
+        self._layout.addWidget(self._addButton)
+
+    # :: INT -> STRING
+    # Names endpoint stops while numbering intermediate stops
+    def _stopLabel(self, index: int) -> str:
+        if index == 0:
+            return "Live"
+        if index == len(self._colors) - 1:
+            return "Last"
+        return str(index + 1)
+
+    # :: INT, STRING -> NONE
+    # Stores a native color selection and publishes the visual edit
+    def _changeColor(self, index: int, color: str) -> None:
+        self._colors[index] = QColor(color).name()
+        self.colorsChanged.emit()
+
+    # :: VOID -> NONE
+    # Appends a stop using the current final color
+    def _addStop(self) -> None:
+        if len(self._colors) >= 8:
+            return
+        self._colors.append(self._colors[-1])
+        self._rebuild()
+        self.colorsChanged.emit()
+
+    # :: INT -> NONE
+    # Removes a stop while preserving the two-stop minimum
+    def _removeStop(self, index: int) -> None:
+        if len(self._colors) <= 2:
+            return
+        self._colors.pop(index)
+        self._rebuild()
+        self.colorsChanged.emit()
 
 
 # Edits the supported single-layer project and emits normalized mappings
@@ -218,6 +325,8 @@ class PropertyInspector(QWidget):
             self._rle.setPlainText(rleText or "x = 3, y = 3\nbob$2bo$3o!")
             self._bits.setText("".join(str(bit) for bit in initial.bits) or "1")
             self._liveColor.setColor(colorToHex(layer.liveColor))
+            self._colorMode.setCurrentIndex(max(0, self._colorMode.findData(layer.colorMode)))
+            self._gradient.setColors(tuple(colorToHex(color) for color in layer.gradient))
             self._trail.setValue(layer.trail)
             self._trailColor.setColor(colorToHex(layer.trailColor))
             self._layout.setCurrentIndex(max(0, self._layout.findData(layer.layout)))
@@ -330,10 +439,16 @@ class PropertyInspector(QWidget):
                 gridData["size"] = [self._gridWidth.value(), self._gridHeight.value()]
             simulationData["grid"] = gridData
             simulationData["initial"] = self._initialData()
-            layerData["render"]["color"] = self._liveColor.color
-            layerData["render"]["layout"] = self._layout.currentData()
-            layerData["render"]["trail"] = self._trail.value()
-            layerData["render"]["trail_color"] = self._trailColor.color
+            renderData = layerData["render"]
+            renderData["color"] = self._liveColor.color
+            renderData["color_mode"] = self._colorMode.currentData()
+            if self._colorMode.currentData() == "state_gradient":
+                renderData["gradient"] = list(self._gradient.colors)
+            else:
+                renderData.pop("gradient", None)
+            renderData["layout"] = self._layout.currentData()
+            renderData["trail"] = self._trail.value()
+            renderData["trail_color"] = self._trailColor.color
         layerData["render"]["fade_rate"] = self._fadeRate.value()
         layerData["opacity"] = self._opacity.value()
         layerData["step_interval_ms"] = self._stepInterval.value()
@@ -490,7 +605,12 @@ class PropertyInspector(QWidget):
         appearance = QGroupBox("Appearance")
         appearanceForm = QFormLayout(appearance)
         self._appearanceForm = appearanceForm
+        self._colorMode = QComboBox()
+        self._colorMode.addItem("Solid", "solid")
+        self._colorMode.addItem("State gradient", "state_gradient")
         self._liveColor = ColorButton("#e8f4ff")
+        self._gradient = GradientEditor(("#ffffff", "#3aa0ff", "#1b2a55"))
+        self._gradient.setToolTip("Colors progress from live cells through the final decay state")
         self._opacity = QDoubleSpinBox()
         self._opacity.setRange(0, 1)
         self._opacity.setSingleStep(0.05)
@@ -519,7 +639,9 @@ class PropertyInspector(QWidget):
         self._colorBy.addItem("Distance from center", "distance")
         self._depthShading = QCheckBox("Shade by camera depth")
         self._vignette = QCheckBox("Darken canvas edges")
+        appearanceForm.addRow("Color mode", self._colorMode)
         appearanceForm.addRow("Live color", self._liveColor)
+        appearanceForm.addRow("State colors", self._gradient)
         appearanceForm.addRow("Opacity", self._opacity)
         appearanceForm.addRow("Fade rate", self._fadeRate)
         appearanceForm.addRow("Trail amount", self._trail)
@@ -600,6 +722,8 @@ class PropertyInspector(QWidget):
         self._cells.textChanged.connect(self._queueTextChange)
         self._rle.textChanged.connect(self._queueTextChange)
         self._liveColor.colorChanged.connect(lambda _value: self._emitChange(False))
+        self._colorMode.currentIndexChanged.connect(self._colorModeChanged)
+        self._gradient.colorsChanged.connect(lambda: self._emitChange(False))
         self._opacity.valueChanged.connect(lambda _value: self._emitChange(False))
         self._fadeRate.valueChanged.connect(lambda _value: self._emitChange(False))
         self._trail.valueChanged.connect(lambda _value: self._emitChange(False))
@@ -883,6 +1007,12 @@ class PropertyInspector(QWidget):
         self._emitChange(usesPixelOffset)
 
     # :: VOID -> NONE
+    # Switches the visible 2D color editor without resetting simulation
+    def _colorModeChanged(self) -> None:
+        self._syncColorControls()
+        self._emitChange(False)
+
+    # :: VOID -> NONE
     # Switches contextual projected-render controls without resetting simulation
     def _renderStyleChanged(self) -> None:
         self._syncRenderControls()
@@ -995,7 +1125,7 @@ class PropertyInspector(QWidget):
         self._syncSimulationControls()
         self._syncGridControls()
         self._syncInitialControls()
-        self._setFieldVisible(self._appearanceForm, self._liveColor, not is3D)
+        self._syncColorControls()
         self._setFieldVisible(self._appearanceForm, self._trail, not is3D)
         self._setFieldVisible(self._appearanceForm, self._trailColor, not is3D)
         self._setFieldVisible(self._appearanceForm, self._layout, not is3D)
@@ -1004,6 +1134,15 @@ class PropertyInspector(QWidget):
         self._setFieldVisible(self._appearanceForm, self._voxelScale, is3D)
         self._setFieldVisible(self._appearanceForm, self._surfaceOnly, is3D)
         self._syncRenderControls()
+
+    # :: VOID -> NONE
+    # Shows the selected two-dimensional color editor
+    def _syncColorControls(self) -> None:
+        is2D = not self._is3DLayer()
+        gradient = self._colorMode.currentData() == "state_gradient"
+        self._setFieldVisible(self._appearanceForm, self._colorMode, is2D)
+        self._setFieldVisible(self._appearanceForm, self._liveColor, is2D and not gradient)
+        self._setFieldVisible(self._appearanceForm, self._gradient, is2D and gradient)
 
     # :: VOID -> NONE
     # Shows projected-only appearance and camera controls contextually

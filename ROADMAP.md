@@ -17,9 +17,11 @@ visual effects.
 - Isometric and camera-projected 3D rendering.
 - Per-layer opacity, deterministic fade rate, and time-based 2D trails with a
   separate trail color.
+- Native solid and editable state-gradient coloring for 2D layers, including
+  deterministic fade and trail interaction.
 - Preview resolution and frame rate decoupled from offline export settings.
 
-## Milestone 1 — 2D state gradients
+## Milestone 1 — 2D state gradients (completed 2026-09-29)
 
 Add independent color treatment for every 2D layer.
 

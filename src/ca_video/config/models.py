@@ -32,6 +32,8 @@ INITIAL_TYPES = {"random", "center_block", "disc", "cells", "rle", "catalog_defa
 WOLFRAM_INITIAL_TYPES = {"single_center", "random", "bits"}
 INITIAL_TYPES_3D = {"random", "center_block", "sphere", "cells", "single", "cross", "catalog_default"}
 PROJECTED_COLOR_MODES = {"fixed", "state", "height", "distance"}
+COLOR_MODES_2D = {"solid", "state_gradient"}
+DEFAULT_STATE_GRADIENT = ((255, 255, 255), (58, 160, 255), (27, 42, 85))
 
 
 # Indicates that a project configuration is invalid or unsupported
@@ -297,7 +299,7 @@ class Initial2DConfig:
 # Stores validated settings for an outer-totalistic or Wolfram 2D layer
 class Layer2DConfig:
 
-    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT?, FLOAT, FLOAT, (INT, INT, INT) -> layer2DConfig
+    # CONSTRUCTOR :: STRING, STRING, BOOL, INT, FLOAT, INT, INT, INT, STRING, FLOAT, (INT, INT, INT), STRING, outerTotalisticRule?, STRING?, initial2DConfig?, INT?, INT?, STRING, INT?, FLOAT, FLOAT, (INT, INT, INT), STRING, ((INT, INT, INT)) -> layer2DConfig
     # Creates immutable-by-convention 2D layer settings
     def __init__(
         self,
@@ -323,6 +325,8 @@ class Layer2DConfig:
         fadeRate: float = 0,
         trail: float = 0,
         trailColor: tuple[int, int, int] = (35, 58, 107),
+        colorMode: str = "solid",
+        gradient: tuple[tuple[int, int, int], ...] = DEFAULT_STATE_GRADIENT,
     ) -> None:
         self._id = id
         self._name = name
@@ -346,6 +350,8 @@ class Layer2DConfig:
         self._fadeRate = fadeRate
         self._trail = trail
         self._trailColor = trailColor
+        self._colorMode = colorMode
+        self._gradient = gradient
 
     #
     # Properties
@@ -488,6 +494,18 @@ class Layer2DConfig:
     @property
     def trailColor(self) -> tuple[int, int, int]:
         return self._trailColor
+
+    # PROPERTY :: VOID -> STRING
+    # Returns solid or state-gradient color treatment
+    @property
+    def colorMode(self) -> str:
+        return self._colorMode
+
+    # PROPERTY :: VOID -> ((INT, INT, INT))
+    # Returns the ordered color stops used across nonzero cell states
+    @property
+    def gradient(self) -> tuple[tuple[int, int, int], ...]:
+        return self._gradient
 
 
 # Stores validated settings for a three-dimensional initializer
@@ -1117,6 +1135,14 @@ def _layerToDict(layer: LayerConfig) -> dict[str, Any]:
             "style": "cells",
             "color": colorToHex(layer.liveColor),
             "layout": layer.layout,
+            **(
+                {
+                    "color_mode": "state_gradient",
+                    "gradient": [colorToHex(color) for color in layer.gradient],
+                }
+                if layer.colorMode == "state_gradient"
+                else {}
+            ),
             **({"fade_rate": layer.fadeRate} if layer.fadeRate else {}),
             **({"trail": layer.trail} if layer.trail else {}),
             **(
@@ -1744,12 +1770,33 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
     render = _asMapping(layerData.get("render"), "layers[0].render")
     _rejectUnknown(
         render,
-        {"style", "color", "layout", "fade_rate", "trail", "trail_color"},
+        {
+            "style",
+            "color",
+            "color_mode",
+            "gradient",
+            "layout",
+            "fade_rate",
+            "trail",
+            "trail_color",
+        },
         "layers[0].render",
     )
     if render.get("style", "cells") != "cells":
         raise ConfigError("the current milestone supports only the cells render style")
     liveColor = _asColor(render.get("color", "#e8f4ff"), "layers[0].render.color")
+    colorMode = render.get("color_mode", "solid")
+    if colorMode not in COLOR_MODES_2D:
+        raise ConfigError("layers[0].render.color_mode must be solid or state_gradient")
+    gradient = DEFAULT_STATE_GRADIENT
+    if colorMode == "state_gradient":
+        gradientValues = render.get("gradient")
+        if not isinstance(gradientValues, list) or not 2 <= len(gradientValues) <= 8:
+            raise ConfigError("layers[0].render.gradient must contain between 2 and 8 colors")
+        gradient = tuple(
+            _asColor(value, f"layers[0].render.gradient[{index}]")
+            for index, value in enumerate(gradientValues)
+        )
     layout = render.get("layout", "fit")
     if layout not in {"fit", "cover"}:
         raise ConfigError("layers[0].render.layout must be fit or cover")
@@ -1780,6 +1827,8 @@ def parseProject(data: Mapping[str, Any], baseDir: Path | None = None) -> Projec
         fadeRate,
         trail,
         trailColor,
+        colorMode,
+        gradient,
     )
     return _completeProject(
         root,

@@ -24,10 +24,25 @@ def scaledGridSize(
     return max(1, int(round(gridWidth * scale))), max(1, int(round(gridHeight * scale)))
 
 
+# :: ((INT, INT, INT)), INT -> matrix
+# Interpolates one RGB color for each nonzero automaton state
+def stateGradient(
+    stops: tuple[tuple[int, int, int], ...],
+    stateCount: int,
+) -> NDArray[np.float32]:
+    stopColors = np.asarray(stops, dtype=np.float32)
+    if stateCount == 1:
+        return stopColors[:1].copy()
+    positions = np.linspace(0, len(stops) - 1, stateCount, dtype=np.float32)
+    lower = np.minimum(positions.astype(np.intp), len(stops) - 2)
+    fraction = (positions - lower).reshape(-1, 1)
+    return stopColors[lower] * (1 - fraction) + stopColors[lower + 1] * fraction
+
+
 # Converts a two-dimensional cell grid into an exact-size RGB frame
 class Renderer2D:
 
-    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING, INT, (INT, INT, INT) -> renderer2D
+    # CONSTRUCTOR :: INT, INT, (INT, INT, INT), (INT, INT, INT), FLOAT, STRING, INT, (INT, INT, INT), STRING, ((INT, INT, INT)) -> renderer2D
     # Creates a nearest-neighbor 2D renderer
     def __init__(
         self,
@@ -39,6 +54,8 @@ class Renderer2D:
         layout: str = "fit",
         states: int = 2,
         trailColor: tuple[int, int, int] = (35, 58, 107),
+        colorMode: str = "solid",
+        gradient: tuple[tuple[int, int, int], ...] = (),
     ) -> None:
         self._width = width
         self._height = height
@@ -48,6 +65,11 @@ class Renderer2D:
         self._layout = layout
         self._states = states
         self._trailColor = np.asarray(trailColor, dtype=np.float32)
+        self._colorMode = colorMode
+        self._stateColors = np.empty((states, 3), dtype=np.float32)
+        self._stateColors[:] = self._liveColor
+        if colorMode == "state_gradient":
+            self._stateColors[1:] = stateGradient(gradient, states - 1)
 
     #
     # Instance Methods
@@ -82,13 +104,13 @@ class Renderer2D:
         visualGrid = displayGrid if displayGrid is not None else grid
         resized = self._resizeNearest(visualGrid, renderWidth, renderHeight)
 
-        intensity = np.zeros(resized.shape, dtype=np.float32)
-        intensity[resized == 1] = 1.0
-        if self._states > 2:
+        intensity = (resized > 0).astype(np.float32)
+        if self._colorMode == "solid" and self._states > 2:
             decaying = resized >= 2
             intensity[decaying] = (self._states - resized[decaying]) / (self._states - 1)
         if presence is not None:
             intensity *= self._resizeNearest(presence, renderWidth, renderHeight)
+        stateColors = self._stateColors[np.minimum(resized, self._states - 1)]
         trailPresence = np.zeros_like(intensity)
         if trailValues is not None:
             currentGrid = self._resizeNearest(grid, renderWidth, renderHeight)
@@ -96,7 +118,7 @@ class Renderer2D:
             trailPresence[currentGrid == 0] = resizedTrail[currentGrid == 0]
         combinedPresence = intensity + trailPresence * (1 - intensity)
         premultiplied = (
-            self._liveColor * intensity[..., None]
+            stateColors * intensity[..., None]
             + self._trailColor * (trailPresence * (1 - intensity))[..., None]
         )
         layer = np.empty((renderHeight, renderWidth, 4), dtype=np.float32)

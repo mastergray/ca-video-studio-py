@@ -113,6 +113,33 @@ def test_preview_and_export_match_generation_at_same_time() -> None:
     np.testing.assert_array_equal(previewFrame, exportFrame)
 
 
+def test_state_gradient_is_deterministic_across_preview_and_export_clocks() -> None:
+    data = defaultProject().toDict()
+    data["output"]["fps"] = 60
+    layer = data["layers"][0]
+    layer["step_interval_ms"] = 100
+    layer["simulation"]["rule"] = {
+        "notation": "B2/S/C4",
+        "neighborhood": "moore",
+    }
+    layer["render"].update(
+        {
+            "color_mode": "state_gradient",
+            "gradient": ["#ff4020", "#7040c0", "#102050"],
+        }
+    )
+    project = parseProject(data)
+    previewRuntime = ProjectRuntime(project, (640, 360))
+    exportRuntime = ProjectRuntime(project, (640, 360))
+
+    previewFrame = previewRuntime.renderAtTick(9, 30)
+    exportFrame = exportRuntime.renderFrame(18)
+
+    assert previewRuntime.engine.generation == 3
+    assert exportRuntime.engine.generation == 3
+    np.testing.assert_array_equal(previewFrame, exportFrame)
+
+
 def test_fade_progress_is_deterministic_across_sampling_intervals() -> None:
     data = defaultProject().toDict()
     layer = data["layers"][0]

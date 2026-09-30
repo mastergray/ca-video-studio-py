@@ -56,6 +56,28 @@ def test_fade_rate_is_a_visual_edit_that_preserves_simulation_state() -> None:
     window.close()
 
 
+def test_state_gradient_editor_is_visual_and_preserves_simulation_state() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(defaultProject())
+    for _ in range(3):
+        window._advancePreview()
+    generation = window.runtime.engine.generation
+    inspector = window.inspector
+
+    inspector._colorMode.setCurrentIndex(inspector._colorMode.findData("state_gradient"))
+    inspector._gradient.setColors(("#ff4020", "#7040c0", "#102050"))
+    inspector._gradient.colorsChanged.emit()
+    app.processEvents()
+
+    assert window.project.layer.colorMode == "state_gradient"
+    assert window.project.layer.gradient == ((255, 64, 32), (112, 64, 192), (16, 32, 80))
+    assert window.runtime.engine.generation == generation
+    assert inspector._gradient.isVisibleTo(inspector)
+    assert not inspector._liveColor.isVisibleTo(inspector)
+    window._setDirty(False)
+    window.close()
+
+
 def test_editor_changes_custom_rule_and_saves_project(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow(defaultProject(tmp_path))

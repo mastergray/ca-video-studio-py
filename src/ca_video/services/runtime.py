@@ -342,6 +342,8 @@ class ProjectRuntime:
                     layer.layout,
                     layer.rule.states if layer.rule is not None else 2,
                     layer.trailColor,
+                    layer.colorMode,
+                    layer.gradient,
                 )
         self._renderers = renderers
 

@@ -63,6 +63,46 @@ def test_2d_trail_amount_must_be_between_zero_and_one() -> None:
         parseProject(data)
 
 
+def test_2d_state_gradient_round_trips_and_solid_remains_default() -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"].update(
+        {
+            "color_mode": "state_gradient",
+            "gradient": ["#ff4020", "#7040c0", "#102050"],
+        }
+    )
+
+    project = parseProject(data)
+    normalized = project.toDict()["layers"][0]["render"]
+
+    assert project.layer.colorMode == "state_gradient"
+    assert project.layer.gradient == ((255, 64, 32), (112, 64, 192), (16, 32, 80))
+    assert normalized["gradient"] == ["#ff4020", "#7040c0", "#102050"]
+    defaultRender = defaultProject().toDict()["layers"][0]["render"]
+    assert "color_mode" not in defaultRender
+    assert "gradient" not in defaultRender
+
+
+@pytest.mark.parametrize(
+    ("gradient", "message"),
+    [
+        (["#ffffff"], "between 2 and 8"),
+        (["#ffffff", "not-a-color"], "#RRGGBB"),
+    ],
+)
+def test_2d_state_gradient_validates_stop_count_and_colors(
+    gradient: list[str],
+    message: str,
+) -> None:
+    data = defaultProject().toDict()
+    data["layers"][0]["render"].update(
+        {"color_mode": "state_gradient", "gradient": gradient}
+    )
+
+    with pytest.raises(ConfigError, match=message):
+        parseProject(data)
+
+
 def test_non_integral_frame_count_is_rejected() -> None:
     project = defaultProject()
     invalid = project.output.withOverrides(durationSeconds=1.01)

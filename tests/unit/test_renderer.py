@@ -1,6 +1,10 @@
 import numpy as np  # Build source grids and inspect RGB output
 
-from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Exercise exact-size 2D rendering
+from ca_video.rendering.renderer_2d import (  # Exercise exact-size 2D rendering
+    Renderer2D,
+    scaledGridSize,
+    stateGradient,
+)
 
 
 def test_renderer_produces_exact_rgb_dimensions() -> None:
@@ -78,3 +82,53 @@ def test_trail_appears_beneath_cells_that_are_still_fading_out() -> None:
     ) / 0.625
     np.testing.assert_allclose(layer[4, 8, :3], expectedColor)
     assert layer[4, 8, 3] == 0.625
+
+
+def test_state_gradient_interpolates_across_generations_states() -> None:
+    grid = np.array([[1, 2, 3, 4]], dtype=np.uint8)
+    renderer = Renderer2D(
+        4,
+        1,
+        (0, 0, 0),
+        (255, 255, 255),
+        states=5,
+        colorMode="state_gradient",
+        gradient=((255, 0, 0), (0, 0, 255)),
+    )
+
+    layer = renderer.renderLayer(grid)
+
+    expected = stateGradient(((255, 0, 0), (0, 0, 255)), 4)
+    np.testing.assert_allclose(layer[0, :, :3], expected)
+    np.testing.assert_array_equal(layer[0, :, 3], np.ones(4, dtype=np.float32))
+
+
+def test_state_gradient_retains_last_color_during_fade_with_independent_trail() -> None:
+    grid = np.zeros((1, 1), dtype=np.uint8)
+    displayGrid = np.array([[3]], dtype=np.uint8)
+    presence = np.array([[0.25]], dtype=np.float32)
+    trail = np.array([[0.5]], dtype=np.float32)
+    renderer = Renderer2D(
+        1,
+        1,
+        (0, 0, 0),
+        (255, 255, 255),
+        states=4,
+        trailColor=(20, 80, 160),
+        colorMode="state_gradient",
+        gradient=((255, 0, 0), (0, 0, 255)),
+    )
+
+    layer = renderer.renderLayer(
+        grid,
+        presence=presence,
+        displayGrid=displayGrid,
+        trailValues=trail,
+    )
+
+    expectedColor = (
+        np.array([0, 0, 255]) * 0.25
+        + np.array([20, 80, 160]) * 0.375
+    ) / 0.625
+    np.testing.assert_allclose(layer[0, 0, :3], expectedColor)
+    assert layer[0, 0, 3] == 0.625
