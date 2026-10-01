@@ -2,7 +2,7 @@ import json  # Inspect normalized persisted project data
 
 import pytest  # Assert configuration validation failures
 
-from ca_video.config.models import (  # Exercise project parsing and persistence
+from ca_video_studio_py.config.models import (  # Exercise project parsing and persistence
     ConfigError,
     defaultProject,
     loadProject,
@@ -137,7 +137,7 @@ def test_custom_rule_and_initializer_round_trip(tmp_path) -> None:
 
 
 def test_every_catalog_preset_is_accepted() -> None:
-    from ca_video.catalogs.rules_2d import ruleCatalog  # Keep test dependency local and explicit
+    from ca_video_studio_py.catalogs.rules_2d import ruleCatalog  # Keep test dependency local and explicit
 
     for entry in ruleCatalog():
         data = defaultProject().toDict()

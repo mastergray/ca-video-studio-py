@@ -23,15 +23,15 @@ from PySide6.QtWidgets import (  # Build the project and layer inspector forms
     QWidget,
 )
 
-from ca_video.catalogs.rules_2d import ruleCatalog  # Populate categorized rule choices
-from ca_video.catalogs.rules_3d import palette3DCatalog, rule3DCatalog  # Populate 3D choices
-from ca_video.config.models import (  # Present normalized project and layer values
+from ca_video_studio_py.catalogs.rules_2d import ruleCatalog  # Populate categorized rule choices
+from ca_video_studio_py.catalogs.rules_3d import palette3DCatalog, rule3DCatalog  # Populate 3D choices
+from ca_video_studio_py.config.models import (  # Present normalized project and layer values
     Layer2DConfig,
     Layer3DConfig,
     ProjectConfig,
     colorToHex,
 )
-from ca_video.services.runtime import stableLayerSeed  # Display deterministic derived layer seeds
+from ca_video_studio_py.services.runtime import stableLayerSeed  # Display deterministic derived layer seeds
 
 RESOLUTIONS = ((640, 360), (960, 540), (1280, 720), (1920, 1080))
 FPS_VALUES = (24, 25, 30, 50, 60)

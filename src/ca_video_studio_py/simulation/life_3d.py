@@ -3,7 +3,7 @@ from __future__ import annotations  # Enable forward references in type annotati
 import numpy as np  # Store and evolve three-dimensional cellular grids
 from numpy.typing import NDArray  # Describe NumPy voxel grids
 
-from ca_video.simulation.rules import OuterTotalisticRule  # Apply general B/S/C rules
+from ca_video_studio_py.simulation.rules import OuterTotalisticRule  # Apply general B/S/C rules
 
 Grid3D = NDArray[np.uint8]
 

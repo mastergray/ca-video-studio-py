@@ -4,9 +4,9 @@ import argparse  # Parse command-line operations and options
 import sys  # Read arguments and report errors
 from pathlib import Path  # Parse explicit output paths
 
-from ca_video import __version__  # Report the installed application version
-from ca_video.config.models import ConfigError, loadProject  # Load validated projects
-from ca_video.encoding.ffmpeg import (  # Render projects and classify render failures
+from ca_video_studio_py import __version__  # Report the installed application version
+from ca_video_studio_py.config.models import ConfigError, loadProject  # Load validated projects
+from ca_video_studio_py.encoding.ffmpeg import (  # Render projects and classify render failures
     RenderCancelled,
     RenderError,
     renderProject,
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     args = buildParser().parse_args(_normalizeArgv(sourceArgs))
     try:
         if args.command == "gui":
-            from ca_video.ui.application import runGui  # Delay Qt initialization for headless commands
+            from ca_video_studio_py.ui.application import runGui  # Delay Qt initialization for headless commands
 
             return runGui(args.project)
         if args.command == "validate":

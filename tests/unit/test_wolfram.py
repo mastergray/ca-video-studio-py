@@ -1,6 +1,6 @@
 import numpy as np  # Describe exact elementary cellular-automata fixtures
 
-from ca_video.simulation.wolfram import WolframEngine  # Exercise scrolling Wolfram histories
+from ca_video_studio_py.simulation.wolfram import WolframEngine  # Exercise scrolling Wolfram histories
 
 
 def test_every_rule_uses_standard_elementary_truth_table() -> None:

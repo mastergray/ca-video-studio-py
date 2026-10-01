@@ -5,7 +5,7 @@ from numpy.typing import NDArray  # Describe voxel grids and rendered layers
 from PySide6.QtCore import QPointF, Qt  # Build isometric face polygons
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF  # Rasterize voxels offscreen
 
-from ca_video.catalogs.rules_3d import Palette3D  # Color voxel faces
+from ca_video_studio_py.catalogs.rules_3d import Palette3D  # Color voxel faces
 
 RGBAFrame = NDArray[np.float32]
 

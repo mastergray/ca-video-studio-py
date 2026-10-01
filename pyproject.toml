@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ca-video-studio-py = "ca_video.cli:main"
+ca-video-studio-py = "ca_video_studio_py.cli:main"
 
 [dependency-groups]
 dev = [
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ca_video"]
+packages = ["src/ca_video_studio_py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

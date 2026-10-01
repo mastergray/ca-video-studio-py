@@ -5,8 +5,8 @@ import math  # Rotate and tilt voxel coordinates
 import numpy as np  # Project, shade, and depth-buffer voxel sprites
 from numpy.typing import NDArray  # Describe voxel grids and RGBA layers
 
-from ca_video.catalogs.rules_3d import Palette3D  # Derive projected color gradients
-from ca_video.config.models import CameraConfig  # Read validated camera settings
+from ca_video_studio_py.catalogs.rules_3d import Palette3D  # Derive projected color gradients
+from ca_video_studio_py.config.models import CameraConfig  # Read validated camera settings
 
 RGBAFrame = NDArray[np.float32]
 

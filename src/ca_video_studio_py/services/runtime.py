@@ -6,24 +6,24 @@ from fractions import Fraction  # Compare presentation and generation times exac
 import numpy as np  # Create frame buffers and disabled-layer grids
 from numpy.typing import NDArray  # Describe NumPy array types
 
-from ca_video.catalogs.rules_3d import getPalette3D  # Resolve isometric face colors
-from ca_video.config.models import (  # Read validated project and layer settings
+from ca_video_studio_py.catalogs.rules_3d import getPalette3D  # Resolve isometric face colors
+from ca_video_studio_py.config.models import (  # Read validated project and layer settings
     Layer2DConfig,
     Layer3DConfig,
     LayerConfig,
     ProjectConfig,
 )
-from ca_video.rendering.fade import FadeState  # Interpolate visual cell and voxel presence
-from ca_video.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
-from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
-from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Project camera-aware voxels
-from ca_video.rendering.trail import TrailState  # Retain deterministic 2D live-cell history
-from ca_video.simulation.initialization import initializeGrid  # Build configured starting grids
-from ca_video.simulation.initialization_3d import initializeGrid3D  # Build starting voxel grids
-from ca_video.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
-from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D automata
-from ca_video.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
-from ca_video.simulation.wolfram_3d import WolframEngine3D  # Evolve extruded elementary histories
+from ca_video_studio_py.rendering.fade import FadeState  # Interpolate visual cell and voxel presence
+from ca_video_studio_py.rendering.renderer_2d import Renderer2D, scaledGridSize  # Render and map 2D grids
+from ca_video_studio_py.rendering.renderer_3d import Renderer3D  # Rasterize voxel layers
+from ca_video_studio_py.rendering.renderer_3d_projected import ProjectedRenderer3D  # Project camera-aware voxels
+from ca_video_studio_py.rendering.trail import TrailState  # Retain deterministic 2D live-cell history
+from ca_video_studio_py.simulation.initialization import initializeGrid  # Build configured starting grids
+from ca_video_studio_py.simulation.initialization_3d import initializeGrid3D  # Build starting voxel grids
+from ca_video_studio_py.simulation.life import OuterTotalisticEngine  # Evolve general B/S/C automata
+from ca_video_studio_py.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D automata
+from ca_video_studio_py.simulation.wolfram import WolframEngine  # Evolve scrolling elementary histories
+from ca_video_studio_py.simulation.wolfram_3d import WolframEngine3D  # Evolve extruded elementary histories
 
 SimulationEngine = OuterTotalisticEngine | OuterTotalisticEngine3D | WolframEngine | WolframEngine3D
 LayerRenderer = Renderer2D | Renderer3D | ProjectedRenderer3D
@@ -32,7 +32,7 @@ LayerRenderer = Renderer2D | Renderer3D | ProjectedRenderer3D
 # :: INT, STRING -> INT
 # Derives a stable per-layer seed without Python's randomized hash function
 def stableLayerSeed(masterSeed: int, layerId: str) -> int:
-    payload = f"ca-video-v1:{masterSeed}:{layerId}".encode()
+    payload = f"ca-video-studio-py:{masterSeed}:{layerId}".encode()
     return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "big") & (2**63 - 1)
 
 

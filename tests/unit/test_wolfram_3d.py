@@ -1,7 +1,7 @@
 import numpy as np  # Compare extruded elementary histories
 
-from ca_video.simulation.wolfram import WolframEngine  # Build matching 2D history rows
-from ca_video.simulation.wolfram_3d import WolframEngine3D  # Exercise reference-style extrusion
+from ca_video_studio_py.simulation.wolfram import WolframEngine  # Build matching 2D history rows
+from ca_video_studio_py.simulation.wolfram_3d import WolframEngine3D  # Exercise reference-style extrusion
 
 
 def test_wolfram_3d_prefills_2d_history_through_centered_depth_band() -> None:

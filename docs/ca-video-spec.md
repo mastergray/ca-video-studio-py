@@ -725,7 +725,7 @@ Version 1 does not parse or execute `.js` scene modules. Rule definitions, palet
 ## 16. Recommended architecture
 
 ```text
-src/ca_video/
+src/ca_video_studio_py/
   cli.py
   config/
     models.py

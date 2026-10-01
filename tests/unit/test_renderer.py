@@ -1,6 +1,6 @@
 import numpy as np  # Build source grids and inspect RGB output
 
-from ca_video.rendering.renderer_2d import (  # Exercise exact-size 2D rendering
+from ca_video_studio_py.rendering.renderer_2d import (  # Exercise exact-size 2D rendering
     Renderer2D,
     scaledGridSize,
     stateGradient,

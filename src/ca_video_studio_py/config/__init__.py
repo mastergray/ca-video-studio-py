@@ -1,4 +1,4 @@
-from ca_video.config.models import (  # Re-export validated project configuration APIs
+from ca_video_studio_py.config.models import (  # Re-export validated project configuration APIs
     ConfigError,
     Layer2DConfig,
     OutputConfig,

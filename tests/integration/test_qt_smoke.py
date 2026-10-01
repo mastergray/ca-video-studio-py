@@ -4,8 +4,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication  # Create the Qt test event loop  # noqa: E402
 
-from ca_video.config.models import defaultProject  # Create a preview project  # noqa: E402
-from ca_video.ui.main_window import MainWindow  # Exercise the native window  # noqa: E402
+from ca_video_studio_py.config.models import defaultProject  # Create a preview project  # noqa: E402
+from ca_video_studio_py.ui.main_window import MainWindow  # Exercise the native window  # noqa: E402
 
 
 def test_main_window_displays_initial_frame() -> None:

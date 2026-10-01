@@ -6,8 +6,8 @@ from pathlib import Path  # Represent an optional project path
 from PySide6.QtCore import QCoreApplication  # Set native application metadata
 from PySide6.QtWidgets import QApplication  # Own the desktop event loop
 
-from ca_video.config.models import defaultProject, loadProject  # Load initial project settings
-from ca_video.ui.main_window import MainWindow  # Create the primary editor window
+from ca_video_studio_py.config.models import defaultProject, loadProject  # Load initial project settings
+from ca_video_studio_py.ui.main_window import MainWindow  # Create the primary editor window
 
 
 # :: STRING|path? -> INT

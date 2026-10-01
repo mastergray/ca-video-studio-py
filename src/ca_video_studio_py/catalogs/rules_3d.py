@@ -4,7 +4,7 @@ import json  # Parse the versioned 3D catalog
 from dataclasses import dataclass  # Store immutable catalog records
 from importlib.resources import files  # Locate packaged catalog data
 
-from ca_video.simulation.rules import OuterTotalisticRule, parseRule  # Normalize catalog rules
+from ca_video_studio_py.simulation.rules import OuterTotalisticRule, parseRule  # Normalize catalog rules
 
 
 # Describes one built-in three-dimensional automaton rule
@@ -45,7 +45,7 @@ def _color(value: str) -> tuple[int, int, int]:
 # :: VOID -> ARRAY<STRING, ANY>
 # Loads the packaged catalog mapping
 def _catalogData() -> dict[str, object]:
-    resource = files("ca_video.catalogs").joinpath("rules_3d.json")
+    resource = files("ca_video_studio_py.catalogs").joinpath("rules_3d.json")
     return json.loads(resource.read_text(encoding="utf-8"))
 
 

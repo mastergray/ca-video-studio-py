@@ -1,6 +1,6 @@
 import numpy as np  # Build and compare deterministic test grids
 
-from ca_video.simulation.life import LifeEngine  # Exercise Life transitions
+from ca_video_studio_py.simulation.life import LifeEngine  # Exercise Life transitions
 
 
 def test_blinker_oscillates_with_fixed_boundaries() -> None:

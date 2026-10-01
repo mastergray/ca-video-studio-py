@@ -1,18 +1,18 @@
 import numpy as np  # Build voxel fixtures and compare deterministic results
 import pytest  # Assert invalid 3D rule limits
 
-from ca_video.catalogs.rules_3d import (  # Verify reference 3D catalogs
+from ca_video_studio_py.catalogs.rules_3d import (  # Verify reference 3D catalogs
     getPalette3D,
     getRule3D,
     palette3DCatalog,
     rule3DCatalog,
 )
-from ca_video.config.models import CameraConfig  # Configure projected camera tests
-from ca_video.rendering.renderer_3d import Renderer3D  # Rasterize voxel fixtures
-from ca_video.rendering.renderer_3d_projected import ProjectedRenderer3D  # Test camera projection
-from ca_video.simulation.initialization_3d import initializeGrid3D  # Build seeded voxel grids
-from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D rules
-from ca_video.simulation.rules import parseRule  # Validate 3D B/S limits
+from ca_video_studio_py.config.models import CameraConfig  # Configure projected camera tests
+from ca_video_studio_py.rendering.renderer_3d import Renderer3D  # Rasterize voxel fixtures
+from ca_video_studio_py.rendering.renderer_3d_projected import ProjectedRenderer3D  # Test camera projection
+from ca_video_studio_py.simulation.initialization_3d import initializeGrid3D  # Build seeded voxel grids
+from ca_video_studio_py.simulation.life_3d import OuterTotalisticEngine3D  # Evolve 3D rules
+from ca_video_studio_py.simulation.rules import parseRule  # Validate 3D B/S limits
 
 
 def test_reference_3d_catalog_is_complete_and_parseable() -> None:

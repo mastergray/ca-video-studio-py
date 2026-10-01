@@ -7,8 +7,8 @@ import uuid  # Create collision-resistant temporary output names
 from collections.abc import Callable  # Describe progress and cancellation callbacks
 from pathlib import Path  # Represent destination paths
 
-from ca_video.config.models import ProjectConfig  # Read validated render settings
-from ca_video.services.runtime import ProjectRuntime  # Produce deterministic RGB frames
+from ca_video_studio_py.config.models import ProjectConfig  # Read validated render settings
+from ca_video_studio_py.services.runtime import ProjectRuntime  # Produce deterministic RGB frames
 
 ProgressCallback = Callable[[int, int], None]
 CancelCallback = Callable[[], bool]

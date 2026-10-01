@@ -1,10 +1,10 @@
 import numpy as np  # Compare rendered frame buffers
 
-from ca_video.config.models import defaultProject, parseProject  # Create deterministic test projects
-from ca_video.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
-from ca_video.simulation.life_3d import OuterTotalisticEngine3D  # Identify voxel runtime layers
-from ca_video.simulation.wolfram import WolframEngine  # Identify Wolfram runtime layers
-from ca_video.simulation.wolfram_3d import WolframEngine3D  # Identify extruded Wolfram layers
+from ca_video_studio_py.config.models import defaultProject, parseProject  # Create deterministic test projects
+from ca_video_studio_py.services.runtime import ProjectRuntime  # Exercise shared preview/export timing
+from ca_video_studio_py.simulation.life_3d import OuterTotalisticEngine3D  # Identify voxel runtime layers
+from ca_video_studio_py.simulation.wolfram import WolframEngine  # Identify Wolfram runtime layers
+from ca_video_studio_py.simulation.wolfram_3d import WolframEngine3D  # Identify extruded Wolfram layers
 
 
 def test_runtime_is_deterministic_and_frame_zero_is_initial_state() -> None:

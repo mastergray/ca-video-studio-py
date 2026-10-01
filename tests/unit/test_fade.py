@@ -1,6 +1,6 @@
 import numpy as np  # Build logical grids and inspect interpolation buffers
 
-from ca_video.rendering.fade import FadeState  # Exercise visual-only cell presence
+from ca_video_studio_py.rendering.fade import FadeState  # Exercise visual-only cell presence
 
 
 def test_fade_state_moves_linearly_and_retains_last_live_state() -> None:

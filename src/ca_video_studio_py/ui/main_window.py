@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (  # Build the native three-pane editor
     QWidget,
 )
 
-from ca_video.config.models import (  # Load, validate, and persist projects
+from ca_video_studio_py.config.models import (  # Load, validate, and persist projects
     ConfigError,
     Layer3DConfig,
     LayerConfig,
@@ -33,10 +33,10 @@ from ca_video.config.models import (  # Load, validate, and persist projects
     parseProject,
     saveProject,
 )
-from ca_video.services.runtime import ProjectRuntime  # Drive deterministic preview frames
-from ca_video.ui.preview_widget import PreviewWidget  # Display RGB preview frames
-from ca_video.ui.property_inspector import PropertyInspector  # Edit supported project settings
-from ca_video.ui.render_worker import RenderWorker  # Export video outside the GUI thread
+from ca_video_studio_py.services.runtime import ProjectRuntime  # Drive deterministic preview frames
+from ca_video_studio_py.ui.preview_widget import PreviewWidget  # Display RGB preview frames
+from ca_video_studio_py.ui.property_inspector import PropertyInspector  # Edit supported project settings
+from ca_video_studio_py.ui.render_worker import RenderWorker  # Export video outside the GUI thread
 
 PROJECT_FILTER = "CA Video Studio Projects (*.cav.json);;JSON (*.json)"
 PREVIEW_WIDTH = 640

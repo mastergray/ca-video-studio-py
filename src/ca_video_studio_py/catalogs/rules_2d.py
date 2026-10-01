@@ -19,7 +19,7 @@ class RuleCatalogEntry:
 # :: VOID -> (ruleCatalogEntry)
 # Loads the packaged two-dimensional rule catalog in display order
 def ruleCatalog() -> tuple[RuleCatalogEntry, ...]:
-    resource = files("ca_video.catalogs").joinpath("rules_2d.json")
+    resource = files("ca_video_studio_py.catalogs").joinpath("rules_2d.json")
     data = json.loads(resource.read_text(encoding="utf-8"))
     return tuple(
         RuleCatalogEntry(

@@ -1,8 +1,8 @@
 import json  # Parse FFprobe output
 import subprocess  # Inspect the rendered MP4 stream
 
-from ca_video.config.models import defaultProject, parseProject  # Create valid render fixtures
-from ca_video.encoding.ffmpeg import renderProject  # Exercise the real FFmpeg pipeline
+from ca_video_studio_py.config.models import defaultProject, parseProject  # Create valid render fixtures
+from ca_video_studio_py.encoding.ffmpeg import renderProject  # Exercise the real FFmpeg pipeline
 
 
 def test_short_mp4_has_expected_stream(tmp_path) -> None:

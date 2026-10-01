@@ -1,9 +1,9 @@
 import numpy as np  # Build state-transition fixtures
 import pytest  # Assert invalid rule failures
 
-from ca_video.catalogs.rules_2d import ruleCatalog  # Verify the required rule collection
-from ca_video.simulation.life import OuterTotalisticEngine  # Exercise general automata
-from ca_video.simulation.rules import parseRule  # Parse custom notation
+from ca_video_studio_py.catalogs.rules_2d import ruleCatalog  # Verify the required rule collection
+from ca_video_studio_py.simulation.life import OuterTotalisticEngine  # Exercise general automata
+from ca_video_studio_py.simulation.rules import parseRule  # Parse custom notation
 
 
 def test_required_2d_catalog_is_complete() -> None:

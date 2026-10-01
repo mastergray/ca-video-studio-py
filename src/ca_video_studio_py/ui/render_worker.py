@@ -5,8 +5,8 @@ from pathlib import Path  # Represent the selected output destination
 
 from PySide6.QtCore import QObject, Signal, Slot  # Run renders and report state through Qt
 
-from ca_video.config.models import ProjectConfig  # Carry an immutable-by-convention project snapshot
-from ca_video.encoding.ffmpeg import RenderCancelled, renderProject  # Export MP4 video
+from ca_video_studio_py.config.models import ProjectConfig  # Carry an immutable-by-convention project snapshot
+from ca_video_studio_py.encoding.ffmpeg import RenderCancelled, renderProject  # Export MP4 video
 
 
 # Executes one render job outside the Qt GUI thread

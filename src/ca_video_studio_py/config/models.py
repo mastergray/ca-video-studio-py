@@ -10,10 +10,10 @@ from decimal import Decimal, InvalidOperation  # Calculate exact output frame co
 from pathlib import Path  # Represent project and output paths
 from typing import Any  # Describe values before schema validation
 
-from ca_video.catalogs.rules_2d import getRule  # Resolve named 2D rule presets
-from ca_video.catalogs.rules_3d import getPalette3D, getRule3D  # Resolve 3D catalogs
-from ca_video.simulation.initialization import parseRle  # Validate inline RLE patterns
-from ca_video.simulation.rules import OuterTotalisticRule, parseRule  # Validate B/S/C rules
+from ca_video_studio_py.catalogs.rules_2d import getRule  # Resolve named 2D rule presets
+from ca_video_studio_py.catalogs.rules_3d import getPalette3D, getRule3D  # Resolve 3D catalogs
+from ca_video_studio_py.simulation.initialization import parseRle  # Validate inline RLE patterns
+from ca_video_studio_py.simulation.rules import OuterTotalisticRule, parseRule  # Validate B/S/C rules
 
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 LAYER_ID = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")

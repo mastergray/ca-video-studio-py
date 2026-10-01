@@ -1,6 +1,6 @@
 import numpy as np  # Build logical grids and inspect deterministic trail decay
 
-from ca_video.rendering.trail import TrailState  # Exercise 2D live-cell history
+from ca_video_studio_py.rendering.trail import TrailState  # Exercise 2D live-cell history
 
 
 def test_trail_retention_uses_reference_thirty_fps_timing() -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations  # Enable forward references in type annotati
 import numpy as np  # Store and evolve cellular-automata grids
 from numpy.typing import NDArray  # Describe NumPy array types
 
-from ca_video.simulation.rules import OuterTotalisticRule, parseRule  # Apply general B/S/C rules
+from ca_video_studio_py.simulation.rules import OuterTotalisticRule, parseRule  # Apply general B/S/C rules
 
 Grid = NDArray[np.uint8]
 

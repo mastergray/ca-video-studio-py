@@ -1,7 +1,7 @@
 import numpy as np  # Compare initialized cell grids
 import pytest  # Assert malformed pattern failures
 
-from ca_video.simulation.initialization import initializeGrid, parseRle  # Exercise initializer variants
+from ca_video_studio_py.simulation.initialization import initializeGrid, parseRle  # Exercise initializer variants
 
 
 def test_disc_and_center_block_are_deterministic() -> None:
