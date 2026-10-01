@@ -14,8 +14,8 @@ from ca_video.ui.main_window import MainWindow  # Create the primary editor wind
 # Starts the native Qt application and returns its exit status
 def runGui(projectPath: str | Path | None = None) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
-    QCoreApplication.setOrganizationName("CA Video")
-    QCoreApplication.setApplicationName("CA Video Generator")
+    QCoreApplication.setOrganizationName("CA Video Studio")
+    QCoreApplication.setApplicationName("CA Video Studio (Python)")
     project = loadProject(projectPath) if projectPath else defaultProject()
     resolvedPath = Path(projectPath).expanduser().resolve() if projectPath else None
     window = MainWindow(project, resolvedPath)

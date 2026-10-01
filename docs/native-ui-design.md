@@ -1,4 +1,4 @@
-# CA Video Generator — Native UI Design
+# CA Video Studio (Python) — Native UI Design
 
 Status: Approved direction for implementation
 Version: 0.1

@@ -33,5 +33,5 @@ Before committing:
 uv sync
 uv run ruff check src tests
 QT_QPA_PLATFORM=offscreen uv run pytest
-uv run ca-video validate examples/life.cav.json
+uv run ca-video-studio-py validate examples/life.cav.json
 ```

@@ -1,4 +1,4 @@
-# CA Video Generator — Product and Technical Specification
+# CA Video Studio (Python) — Product and Technical Specification
 
 Status: Draft for implementation
 Version: 0.4
@@ -22,7 +22,7 @@ outer-totalistic and Wolfram layers.
 
 ## 1. Summary
 
-CA Video Generator is a local-first Python application for designing, previewing, and exporting deterministic cellular-automata videos. It combines the offline MP4 workflow in `ref/ca_video` with the useful visual and simulation options in `midi-ca-server-2`: layered 2D and 3D automata, larger rule and palette catalogs, independent layer timing, Wolfram modes, smooth visual transitions, and isometric voxel rendering.
+CA Video Studio is a local-first Python application for designing, previewing, and exporting deterministic cellular-automata videos. It combines the offline MP4 workflow in `ref/ca_video` with the useful visual and simulation options in `midi-ca-server-2`: layered 2D and 3D automata, larger rule and palette catalogs, independent layer timing, Wolfram modes, smooth visual transitions, and isometric voxel rendering.
 
 The application must export H.264 MP4 video at a 16:9 aspect ratio, up to 1920×1080, up to 60 seconds long. A saved project must render identically when run again with the same application version, project file, and random seed.
 
@@ -608,7 +608,7 @@ to native Qt without reproducing its browser/server architecture.
 
 ### 13.1 Launch and project flow
 
-Running `ca-video` or `ca-video gui [PROJECT.cav.json]` starts the PySide6 desktop editor. No server or network listener is created.
+Running `ca-video-studio-py` or `ca-video-studio-py gui [PROJECT.cav.json]` starts the PySide6 desktop editor. No server or network listener is created.
 
 The main window uses `QMainWindow` with a central preview and dockable or resizable tool areas. Its default editor mode has a layer pane on the left, the 16:9 preview and transport in the center, and a contextual inspector on the right. A preview-only mode hides editor chrome and may be made full-screen. The application has:
 
@@ -685,13 +685,13 @@ and server load actions have no native UI equivalent in version 1.
 Required commands:
 
 ```text
-ca-video [PROJECT.cav.json]
-ca-video gui [PROJECT.cav.json]
-ca-video validate PROJECT.cav.json
-ca-video render PROJECT.cav.json [--output FILE.mp4] [--overwrite]
-ca-video frame PROJECT.cav.json --time SECONDS --output FILE.png
-ca-video catalogs [--dimension 2d|3d] [--json]
-ca-video migrate LEGACY.json --output PROJECT.cav.json
+ca-video-studio-py [PROJECT.cav.json]
+ca-video-studio-py gui [PROJECT.cav.json]
+ca-video-studio-py validate PROJECT.cav.json
+ca-video-studio-py render PROJECT.cav.json [--output FILE.mp4] [--overwrite]
+ca-video-studio-py frame PROJECT.cav.json --time SECONDS --output FILE.png
+ca-video-studio-py catalogs [--dimension 2d|3d] [--json]
+ca-video-studio-py migrate LEGACY.json --output PROJECT.cav.json
 ```
 
 CLI behavior:
@@ -702,13 +702,13 @@ CLI behavior:
 - Cancellation exits 130.
 - Logs go to stderr; machine-readable results can be requested with `--json` where applicable.
 - `render` never overwrites an existing file without `--overwrite`.
-- `ca-video` with no subcommand is equivalent to `ca-video gui`.
+- `ca-video-studio-py` with no subcommand is equivalent to `ca-video-studio-py gui`.
 
 ## 15. Legacy migration
 
 ### 15.1 Python proof-of-concept JSON
 
-`ca-video migrate` supports the current single-automaton proof-of-concept format and maps:
+`ca-video-studio-py migrate` supports the current single-automaton proof-of-concept format and maps:
 
 - `dimensions`, `size`, `rule`, `birth`, `survive`, `states`, `neighborhood`, and `wrap` into one layer.
 - `seed` into the project master seed.

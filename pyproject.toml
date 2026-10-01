@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ca-video"
+name = "ca-video-studio-py"
 version = "0.1.0"
-description = "Native desktop cellular-automata video generator"
+description = "Native Python studio for designing cellular-automata videos"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ca-video = "ca_video.cli:main"
+ca-video-studio-py = "ca_video.cli:main"
 
 [dependency-groups]
 dev = [

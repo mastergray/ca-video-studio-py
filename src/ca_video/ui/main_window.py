@@ -38,7 +38,7 @@ from ca_video.ui.preview_widget import PreviewWidget  # Display RGB preview fram
 from ca_video.ui.property_inspector import PropertyInspector  # Edit supported project settings
 from ca_video.ui.render_worker import RenderWorker  # Export video outside the GUI thread
 
-PROJECT_FILTER = "CA Video Projects (*.cav.json);;JSON (*.json)"
+PROJECT_FILTER = "CA Video Studio Projects (*.cav.json);;JSON (*.json)"
 PREVIEW_WIDTH = 640
 PREVIEW_HEIGHT = 360
 PREVIEW_FPS = 30
@@ -753,7 +753,12 @@ class MainWindow(QMainWindow):
     def _openProject(self) -> None:
         if not self._confirmUnsavedChanges():
             return
-        selected, _ = QFileDialog.getOpenFileName(self, "Open CA Video Project", "", PROJECT_FILTER)
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open CA Video Studio Project",
+            "",
+            PROJECT_FILTER,
+        )
         if not selected:
             return
         try:
@@ -784,7 +789,12 @@ class MainWindow(QMainWindow):
     # Prompts for a project destination and saves atomically
     def _saveProjectAs(self) -> bool:
         suggested = str(self._projectPath or (self._project.baseDir / "untitled.cav.json"))
-        selected, _ = QFileDialog.getSaveFileName(self, "Save CA Video Project", suggested, PROJECT_FILTER)
+        selected, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save CA Video Studio Project",
+            suggested,
+            PROJECT_FILTER,
+        )
         if not selected:
             return False
         path = Path(selected)
@@ -840,7 +850,7 @@ class MainWindow(QMainWindow):
     # Updates the desktop window title from project state
     def _updateTitle(self) -> None:
         marker = " *" if self._dirty else ""
-        self.setWindowTitle(f"CA Video — {self._project.name}{marker}")
+        self.setWindowTitle(f"CA Video Studio — {self._project.name}{marker}")
 
     # :: VOID -> NONE
     # Enters or exits the distraction-free preview workspace

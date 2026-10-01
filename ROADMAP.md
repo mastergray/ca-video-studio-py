@@ -1,4 +1,4 @@
-# CA Video Generator Roadmap
+# CA Video Studio (Python) Roadmap
 
 This roadmap records the intended implementation order beyond the capabilities
 already described in the product specification. Milestones should preserve

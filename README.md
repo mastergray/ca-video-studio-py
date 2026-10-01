@@ -1,6 +1,6 @@
-# CA Video Generator
+# CA Video Studio (Python)
 
-CA Video Generator is a native Python/PySide6 desktop application for designing,
+CA Video Studio is a native Python/PySide6 desktop application for designing,
 previewing, saving, and rendering deterministic cellular-automata videos. It can
 combine independently timed 2D and 3D automata in one scene and export H.264 MP4
 video at up to 1920×1080 and 60 seconds.
@@ -41,7 +41,7 @@ Install the environment and open a new untitled project:
 
 ```bash
 uv sync
-uv run ca-video
+uv run ca-video-studio-py
 ```
 
 No project file is required at launch.
@@ -211,15 +211,15 @@ For automation, continuous integration, or troubleshooting, saved projects may
 optionally be validated or rendered without opening the UI:
 
 ```bash
-uv run ca-video validate examples/life.cav.json
-uv run ca-video render examples/life.cav.json --output renders/life.mp4
+uv run ca-video-studio-py validate examples/life.cav.json
+uv run ca-video-studio-py render examples/life.cav.json --output renders/life.mp4
 ```
 
 Passing a project directly when launching the GUI is also supported as a
 convenience for file associations and development:
 
 ```bash
-uv run ca-video gui examples/life.cav.json
+uv run ca-video-studio-py gui examples/life.cav.json
 ```
 
 These commands are optional and are not part of the normal editor workflow.

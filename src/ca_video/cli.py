@@ -19,8 +19,8 @@ COMMANDS = {"gui", "validate", "render"}
 # Builds the command-line parser and supported subcommands
 def buildParser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ca-video",
-        description="Cellular automata video generator",
+        prog="ca-video-studio-py",
+        description="Native Python studio for cellular automata videos",
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command")
