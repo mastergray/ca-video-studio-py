@@ -235,3 +235,7 @@ uv run pytest
 
 Development and repository conventions are documented in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## License
+
+CA Video Studio (Python) is available under the [MIT License](LICENSE).
